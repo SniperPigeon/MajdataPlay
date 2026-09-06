@@ -63,9 +63,6 @@ Shader "Common/RadialMask"
                 UNITY_DEFINE_INSTANCED_PROP(float, _Softness)
 
                 UNITY_DEFINE_INSTANCED_PROP(fixed4, _RendererColor)
-                UNITY_DEFINE_INSTANCED_PROP(fixed4, _Flip)
-                UNITY_DEFINE_INSTANCED_PROP(float, _EnableExternalAlpha)
-                UNITY_DEFINE_INSTANCED_PROP(float4, _MainTex_ST)
             UNITY_INSTANCING_BUFFER_END(Props)
 
             v2f vert(appdata_t IN)
