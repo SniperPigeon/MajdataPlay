@@ -56,7 +56,6 @@ namespace MajdataPlay.Scenes.Game
         [SerializeField]
         Sprite _defaultSprite;
 
-        [SerializeField]
         Material _backgroundMaterial;
 
         // This is the texture libVLC writes to directly. It's private.
@@ -101,6 +100,7 @@ namespace MajdataPlay.Scenes.Game
 #else
             _videoPlayer = GetComponent<VideoPlayer>();
 #endif
+            _backgroundMaterial = _coverRenderer.material;
             _screenRotationAngle = MajEnv.Settings.Display.GameplayScreenRotationAngle;
             _defaultScale = transform.localScale;
             var angle = Quaternion.Euler(0, 0, (int)_screenRotationAngle * -90);
