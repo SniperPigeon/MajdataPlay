@@ -7,7 +7,7 @@ using UnityEngine.PlayerLoop;
 using MajdataPlay.Diagnostics;
 
 #if UNITY_EDITOR
-using UnityEditor; 
+using UnityEditor;
 #endif
 #nullable enable
 namespace MajdataPlay.Rendering
@@ -15,7 +15,7 @@ namespace MajdataPlay.Rendering
     [ExecuteAlways]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
-    public sealed class RawSpriteRenderer : MonoBehaviour
+    public class RawSpriteRenderer : MonoBehaviour
     {
         // ============================================================
         // Inspector
@@ -323,7 +323,7 @@ namespace MajdataPlay.Rendering
             ApplyAll();
         }
 
-        private void OnPreLateUpdate()
+        protected virtual void OnPreLateUpdate()
         {
             if (!isActiveAndEnabled)
             {
@@ -525,7 +525,7 @@ namespace MajdataPlay.Rendering
             _materialDirty = true;
         }
 
-        private void MarkAllDirty()
+        protected void MarkAllDirty()
         {
             MarkColorDirty();
             MarkGeometryDirty();
@@ -573,16 +573,34 @@ namespace MajdataPlay.Rendering
             _spriteDirty = false;
             _geometryDirty = false;
 
-            // Instancing requires the same Mesh object, not just identical vertices.
-            var next = RawSpriteResources.AcquireMesh(_sprite, _flipX, _flipY);
-            _meshFilter.sharedMesh = next?.Mesh;
-            RawSpriteResources.Release(_meshEntry);
-            _meshEntry = next;
+            _meshFilter.sharedMesh = AcquireMesh(_sprite, _flipX, _flipY);
 
             _appliedSprite = _sprite;
             _appliedFlipX = _flipX;
             _appliedFlipY = _flipY;
             _materialDirty = true;
+        }
+
+        protected virtual Mesh? AcquireMesh(Sprite? sprite, bool flipX, bool flipY)
+        {
+            // Instancing requires the same Mesh object, not just identical vertices.
+            var next = RawSpriteResources.AcquireMesh(sprite, flipX, flipY);
+            RawSpriteResources.Release(_meshEntry);
+            _meshEntry = next;
+
+            return next?.Mesh;
+        }
+
+        protected virtual Material AcquireMaterial(Material? source, Texture? texture)
+        {
+            // Textures belong to a shared material. A texture in the property block
+            // disables GPU instancing even when every renderer uses the same texture.
+            var next = RawSpriteResources.AcquireMaterial(source, texture);
+            var material = next != null ? next.Material : source;
+            RawSpriteResources.Release(_materialEntry);
+            _materialEntry = next;
+
+            return material;
         }
 
         // ============================================================
@@ -635,13 +653,8 @@ namespace MajdataPlay.Rendering
 
             EnsureRenderer();
 
-            // Textures belong to a shared material. A texture in the property block
-            // disables GPU instancing even when every renderer uses the same texture.
-            var next = RawSpriteResources.AcquireMaterial(
-                _sharedMaterial, _sprite != null ? _sprite.texture : null);
-            _meshRenderer.sharedMaterial = next != null ? next.Material : _sharedMaterial;
-            RawSpriteResources.Release(_materialEntry);
-            _materialEntry = next;
+            _meshRenderer.sharedMaterial = AcquireMaterial(_sharedMaterial, _sprite != null ? _sprite.texture : null);
+
             _appliedMaterial = _sharedMaterial;
         }
 

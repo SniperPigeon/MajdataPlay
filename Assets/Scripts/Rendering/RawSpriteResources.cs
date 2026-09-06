@@ -81,7 +81,7 @@ namespace MajdataPlay.Rendering
 
                     meshData.SetVertexBufferParams(vertexCount, vertexAttributes);
                 }
-                    
+
                 var positions = meshData.GetVertexData<Vector3>(0);
                 var uvs = meshData.GetVertexData<Vector2>(1);
                 var colors = meshData.GetVertexData<Color32>(2);
