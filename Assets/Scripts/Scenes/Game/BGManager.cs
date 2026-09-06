@@ -104,10 +104,6 @@ namespace MajdataPlay.Scenes.Game
             _screenRotationAngle = MajEnv.Settings.Display.GameplayScreenRotationAngle;
             _defaultScale = transform.localScale;
             var angle = Quaternion.Euler(0, 0, (int)_screenRotationAngle * -90);
-            if(_videoRenderer != null)
-            {
-                _videoRenderer.transform.localRotation = angle;
-            }
             transform.localRotation = angle;
         }
         void OnDestroy()
