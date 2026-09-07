@@ -4,8 +4,8 @@ using UnityEngine;
 namespace MajdataPlay.Rendering
 {
     /// <summary>
-    /// Borrows preloaded skin resources. Flips are always ignored; pooled note
-    /// replacement, disable and destruction do not release the skin's resources.
+    /// Borrows preloaded skin resources for Simple mode. Flips are always ignored;
+    /// Sliced/Tiled meshes use the base renderer's reference-counted cache.
     /// </summary>
     [AddComponentMenu("Rendering/Note Renderer")]
     public sealed class NoteRenderer : RawSpriteRenderer
@@ -24,6 +24,8 @@ namespace MajdataPlay.Rendering
 
         protected override Mesh? AcquireMesh(Sprite? sprite, bool flipX, bool flipY)
         {
+            if (DrawMode != SpriteDrawMode.Simple)
+                return base.AcquireMesh(sprite, false, false);
 #if UNITY_EDITOR
             if (!Application.isPlaying)
                 return base.AcquireMesh(sprite, false, false);

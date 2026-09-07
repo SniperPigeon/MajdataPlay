@@ -36,6 +36,19 @@ namespace MajdataPlay.Rendering
         [SerializeField]
         private bool _flipY;
 
+        [Header("Draw Mode")]
+        [SerializeField]
+        private SpriteDrawMode _drawMode = SpriteDrawMode.Simple;
+
+        [SerializeField]
+        private Vector2 _size = Vector2.one;
+
+        [SerializeField]
+        private SpriteTileMode _tileMode = SpriteTileMode.Continuous;
+
+        [SerializeField, Range(0f, 1f)]
+        private float _adaptiveModeThreshold = 0.5f;
+
         [Header("Sorting")]
         [SerializeField]
         private string _sortingLayerName = "Default";
@@ -113,6 +126,61 @@ namespace MajdataPlay.Rendering
                 _flipY = value;
                 MarkGeometryDirty();
             }
+        }
+
+        public SpriteDrawMode DrawMode
+        {
+            get => _drawMode;
+            set
+            {
+                if (_drawMode == value)
+                    return;
+                _drawMode = value;
+                MarkGeometryDirty();
+            }
+        }
+
+        public Vector2 Size
+        {
+            get => _size;
+            set
+            {
+                value = new Vector2(SanitizeSize(value.x), SanitizeSize(value.y));
+                if (_size.Equals(value))
+                    return;
+                _size = value;
+                MarkGeometryDirty();
+            }
+        }
+
+        public SpriteTileMode TileMode
+        {
+            get => _tileMode;
+            set
+            {
+                if (_tileMode == value)
+                    return;
+                _tileMode = value;
+                MarkGeometryDirty();
+            }
+        }
+
+        public float AdaptiveModeThreshold
+        {
+            get => _adaptiveModeThreshold;
+            set
+            {
+                value = float.IsNaN(value) ? 0.5f : Mathf.Clamp01(value);
+                if (_adaptiveModeThreshold == value)
+                    return;
+                _adaptiveModeThreshold = value;
+                MarkGeometryDirty();
+            }
+        }
+
+        private static float SanitizeSize(float value)
+        {
+            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Max(0f, value);
         }
 
         public string SortingLayerName
@@ -285,6 +353,10 @@ namespace MajdataPlay.Rendering
 
         private bool _appliedFlipX;
         private bool _appliedFlipY;
+        private SpriteDrawMode _appliedDrawMode;
+        private Vector2 _appliedSize;
+        private SpriteTileMode _appliedTileMode;
+        private float _appliedAdaptiveModeThreshold;
 
         private int _appliedSortingLayerID;
         private int _appliedSortingOrder;
@@ -344,7 +416,11 @@ namespace MajdataPlay.Rendering
             }
 
             if (_flipX != _appliedFlipX ||
-                _flipY != _appliedFlipY)
+                _flipY != _appliedFlipY ||
+                _drawMode != _appliedDrawMode ||
+                !_size.Equals(_appliedSize) ||
+                _tileMode != _appliedTileMode ||
+                _adaptiveModeThreshold != _appliedAdaptiveModeThreshold)
             {
                 MarkGeometryDirty();
             }
@@ -373,7 +449,7 @@ namespace MajdataPlay.Rendering
         {
             if (!Application.isPlaying)
             {
-                ApplyDirty();
+                OnPreLateUpdate();
             }
         }
 
@@ -573,18 +649,26 @@ namespace MajdataPlay.Rendering
             _spriteDirty = false;
             _geometryDirty = false;
 
+            _size = new Vector2(SanitizeSize(_size.x), SanitizeSize(_size.y));
+            _adaptiveModeThreshold = float.IsNaN(_adaptiveModeThreshold)
+                ? 0.5f : Mathf.Clamp01(_adaptiveModeThreshold);
             _meshFilter.sharedMesh = AcquireMesh(_sprite, _flipX, _flipY);
 
             _appliedSprite = _sprite;
             _appliedFlipX = _flipX;
             _appliedFlipY = _flipY;
+            _appliedDrawMode = _drawMode;
+            _appliedSize = _size;
+            _appliedTileMode = _tileMode;
+            _appliedAdaptiveModeThreshold = _adaptiveModeThreshold;
             _materialDirty = true;
         }
 
         protected virtual Mesh? AcquireMesh(Sprite? sprite, bool flipX, bool flipY)
         {
             // Instancing requires the same Mesh object, not just identical vertices.
-            var next = RawSpriteResources.AcquireMesh(sprite, flipX, flipY);
+            var next = RawSpriteResources.AcquireMesh(sprite, flipX, flipY,
+                _drawMode, _size, _tileMode, _adaptiveModeThreshold);
             RawSpriteResources.Release(_meshEntry);
             _meshEntry = next;
 
