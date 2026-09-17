@@ -167,7 +167,7 @@ namespace MajdataPlay.Scenes.Game
             {"L3", 38 },
             {"L4", 39 },
             {"L5", 40 },
-            {"Ex", 41 },
+            {"Ex", 42 },
         };
 
         readonly static IReadOnlyDictionary<SensorArea, SensorArea[]> TOUCH_GROUPS = new Dictionary<SensorArea, SensorArea[]>()
