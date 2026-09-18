@@ -103,13 +103,6 @@ namespace MajdataPlay.IO
                 var deviceIndex = asioOptions.DeviceIndex;
                 
 #endif
-#if !UNITY_EDITOR && UNITY_STANDALONE_WIN
-                if (MajEnv.Mode == RunningMode.View)
-                {
-                    backend = SoundBackendOption.Wasapi;
-                    isExclusiveRequest = false;
-                }
-#endif
 #if UNITY_ANDROID || UNITY_IOS || !UNITY_STANDALONE_WIN
                 switch (backend)
                 {
