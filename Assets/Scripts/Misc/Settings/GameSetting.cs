@@ -205,6 +205,11 @@ namespace MajdataPlay.Settings
 
         [OptionEnumerator(typeof(EngineEnumSettingEnumerator))]
         public RenderQualityOption RenderQuality { get; set; } = RenderQualityOption.Low;
+
+        [Step("5")]
+        [Range("50", "100", HasMax = true, HasMin = true)]
+        [OptionEnumerator(typeof(EngineNumberSettingEnumerator))]
+        public int RenderScale { get; set; } = 100;
 #if UNITY_STANDALONE
         [HideInSettingUI]
         public bool Topmost { get; set; } = false;
