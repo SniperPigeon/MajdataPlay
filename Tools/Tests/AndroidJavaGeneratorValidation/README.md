@@ -2,7 +2,7 @@
 
 This is an **independent .NET 9 executable**, not a build of the Unity project's
 IDE-generated solution or project files. It links the production generator's
-directly maintained source files and production Android runtime sources. It uses
+directly maintained source files and archived legacy Android runtime fixtures. It uses
 **real Unity 6000.3.17f1** CoreModule and AndroidJNIModule assemblies; it does not
 substitute Unity or JNI stubs.
 
@@ -15,14 +15,21 @@ substitute Unity or JNI stubs.
 - Have the NuGet package **Microsoft.CodeAnalysis.CSharp 4.3.1** and its transitive
   dependencies cached. Restore uses only this directory as a package source;
   there is no implicit network restore or package upgrade.
-- Have the production files from the generator/runtime implementation available:
-  - Tools/AndroidJavaGenerator/Source/**/*.cs
-  - Tools/AndroidJavaGenerator/Java/JavaApiExtractor.java
-  - Assets/Plugins/MajdataPlay/Platform/Android/JavaClassAttribute.cs
-  - Assets/Plugins/MajdataPlay/Platform/Android/JavaApiConfigurationAttribute.cs
-  - Assets/Plugins/MajdataPlay/Platform/Android/JavaObject.cs
-  - Assets/Plugins/MajdataPlay/Platform/Android/AndroidJni.cs
-  - Assets/Plugins/MajdataPlay/Platform/Android/JavaInvocationException.cs
+- Have the generator sources and archived runtime fixtures available:
+  - Tools/CSharp/AndroidJavaGenerator/src/**/*.cs
+  - Tools/CSharp/AndroidJavaGenerator/Java/JavaApiExtractor.java
+  - Fixtures/LegacyRuntime/JavaClassAttribute.cs
+  - Fixtures/LegacyRuntime/JavaApiConfigurationAttribute.cs
+  - Fixtures/LegacyRuntime/Runtime/Java/Lang/JavaObject.cs
+  - Fixtures/LegacyRuntime/AndroidJni.cs
+  - Fixtures/LegacyRuntime/JavaInvocationException.cs
+
+These runtime files are retained under this harness after production switched to
+the standalone AndroidJavaWrapperGenerator bindings. They are compiled only for
+legacy analyzer regressions, without installing them into the main Unity project.
+`Tools/Tests/ValidateAndroidJavaGeneratorUnity.ps1` stages the same archived files
+for isolated analyzer verification. Validate the current binding generator with
+`Tools/Tests/AndroidJavaWrapperGeneratorValidation` instead.
 
 No generated analyzer DLL installation is necessary. The installed analyzer DLL,
 its importer metadata, and the Unity build/install scripts are outside this
@@ -57,7 +64,7 @@ respected; explicit application arguments take precedence:
 ~~~powershell
 $env:UNITY_ANDROID_SDK = 'C:/Program Files/Unity Editors/6000.3.17f1/Editor/Data/PlaybackEngines/AndroidPlayer/SDK'
 $env:UNITY_JAVA_HOME = 'C:/Program Files/Unity Editors/6000.3.17f1/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK'
-$env:MAJDATA_JAVA_EXTRACTOR = (Resolve-Path 'Tools/AndroidJavaGenerator/Java/JavaApiExtractor.java').Path
+$env:MAJDATA_JAVA_EXTRACTOR = (Resolve-Path 'Tools/CSharp/AndroidJavaGenerator/Java/JavaApiExtractor.java').Path
 dotnet run --project Tools/Tests/AndroidJavaGeneratorValidation/AndroidJavaGeneratorValidation.csproj -- --api-level 36 --timeout-seconds 180
 ~~~
 
@@ -67,6 +74,7 @@ Useful bounded subsets and help:
 dotnet run --project Tools/Tests/AndroidJavaGeneratorValidation/AndroidJavaGeneratorValidation.csproj -- --list
 dotnet run --project Tools/Tests/AndroidJavaGeneratorValidation/AndroidJavaGeneratorValidation.csproj -- --filter source-api
 dotnet run --project Tools/Tests/AndroidJavaGeneratorValidation/AndroidJavaGeneratorValidation.csproj -- --filter runtime
+dotnet run --project Tools/Tests/AndroidJavaGeneratorValidation/AndroidJavaGeneratorValidation.csproj -- --filter unity-data-player
 dotnet run --project Tools/Tests/AndroidJavaGeneratorValidation/AndroidJavaGeneratorValidation.csproj -- --help
 ~~~
 
@@ -109,7 +117,7 @@ required for normal execution. A filter matching no cases is an error, not a pas
   reports failure, and continues the finite remaining cases. javac/jar have
   their own deadlines. Captured output is capped at one MiB per stream.
 - Workers instantiate the real AndroidJavaGenerator using CSharpGeneratorDriver.
-  CSharpCompilation includes all five production runtime sources, the actual
+  CSharpCompilation includes all five archived runtime sources, the actual
   Unity DLLs, and host trusted BCL assemblies. The harness assembly itself is
   excluded from dynamic compilation references to avoid masking missing types.
 - Positive output is semantically compiled and emitted to an in-memory DLL.
@@ -124,22 +132,66 @@ are not accepted as successful negative-test results.
 
 ## Coverage
 
+Class-object identity and reference lifetime still require Android device checks:
+call `Class.getName`, pass the result to a Java `Class` parameter, cover nested and
+interface types, and verify disposing one property result does not invalidate
+another result or an existing instance. Managed compilation and the Editor guard
+do not validate those JNI behaviors.
+
+- `unity-data-player-references` uses genuine installed Android IL2CPP Player
+  CoreModule metadata from nested `Variations/il2cpp/(Release/)Managed` layouts,
+  never Editor metadata or synthetic assembly paths. It clears all editor/SDK/JDK
+  environment hints, leaves SDK/JDK options unset, and requires inference of the
+  bundled API-36 SDK, JDK, and explicitly requested `{UnityData}` Unity jar without
+  auto-injected classpath entries. This is managed configuration validation only,
+  not Unity Player compilation, packaging, or JNI/device execution.
 - All Java primitives, including signed byte -> sbyte and char -> char, exact
   method/constructor/field JNI descriptors forwarded to AndroidJni.Call/GetField,
   and getter-only fields even when Java fields are mutable.
+- Static getter-only, non-null `Class` properties resolve each wrapper's own Java
+  binary name for source/class/JAR inputs, interfaces, enums, and nested types.
+  Annotated base/derived wrappers hide the property explicitly without C# hiding
+  warnings. Mapped `java.lang.Class` results, a C# wrapper named `Class`, Java
+  field/method aliases, handwritten-member `AJG008` conflicts, ownership XML
+  documentation, and the non-Android JNI guard are covered without a JVM.
 - Nullable annotated-wrapper references, nullable unknown AndroidJavaObject
   references, interface/concrete overloads, generic and bounded-generic erasure.
 - Public inherited methods, inherited static methods, covariant override
-  selection, field hiding, and IncludeInheritedMembers=false.
+  selection, field hiding, and IncludeInheritedMembers=false. Exact instance
+  `equals(Object)`, `hashCode()`, and `toString()` signatures never produce
+  duplicate ordinary Java aliases, including interface redeclarations and
+  inherited Object members. Genuine overloads and static lookalikes survive.
+- Effective Java `equals(Object)`, `hashCode()`, and `toString()` overrides across
+  source/class/JAR inputs generate the corresponding nullable CLR overrides.
+  Equality additionally generates `IEquatable<Self>` and nullable typed equality,
+  with direct Java `GetHashCode` dispatch even when Java overrides only `equals`. Inherited
+  implementations remain effective with IncludeInheritedMembers=false. Plain
+  Object behavior, overloads, static lookalikes, the `getHashCode` spelling,
+  interface redeclarations, and classes inheriting only Object implementations
+  do not trigger overrides. Generated overrides call `AndroidJni.Call` directly
+  using the target Java class and exact JNI method descriptors. Real SDK
+  ArrayList/StringBuilder/Object/List/Uri requests,
+  deterministic reused/fresh driver output, and handwritten override/typed
+  equality AJG008 conflicts are covered without executing JNI.
+  In-memory emission and uninitialized generated wrappers additionally verify
+  managed identity, null/unrelated CLR shortcuts, typed equality, cross-wrapper
+  disposal guards, and hash/string disposal guards. These instances contain no
+  Java reference or JNI handle and do not validate live Java virtual dispatch.
+- Public constructor overloads, implicit public defaults, parameterized-only
+  constructors, and exclusion of private/protected/package constructors across
+  source/class/JAR inputs. SDK-only API-36 bindings verify Intent constructor
+  descriptors and reference wrapping without instantiation constructors for
+  Looper, Runnable, and InputStream.
 - Static final primitive/string **compile-time const** values: finite values,
   NaN, infinities, Unicode, escaped punctuation, newlines, tabs, embedded NUL, and
   unpaired UTF-16 surrogates. String constants must round-trip exactly through
   the helper's base64-utf16be XML representation.
   The NUL fixture intentionally remains strict to catch broken XML transports.
-- Interface default/static methods and constants, no interface instantiation
-  constructors, enum values/valueOf, and public static/non-static nested Java
-  binary names with $. Non-static Widget$Inner constructors must prepend the
-  exact Lfixtures/Widget; JVM parameter and expose typed enclosingInstance in
+- Interface default/static methods and constants, reference-only construction for
+  interfaces and abstract classes (including an abstract class with a public
+  constructor), enum values/valueOf, and public static/non-static
+  nested Java binary names with $. Non-static Widget$Inner constructors must prepend
+  the exact Lfixtures/Widget; JVM parameter and expose typed enclosingInstance in
   C#. The parity case compares these source/class/jar constructor contracts.
 - Primitive, string, typed-wrapper, and unknown-object arrays; varargs; jagged
   arrays; nullable array dimensions and nullable object leaves.
@@ -159,6 +211,11 @@ are not accepted as successful negative-test results.
 - Pure managed MapArray/Wrap null behavior, null elements/rows, signed bytes,
   empty arrays, converter errors, and non-Android PlatformNotSupportedException
   guards. No fake AndroidJavaObject handles are created.
+- `JavaObject` CLR override signatures and nullable equality/inequality
+  operators; null, unrelated CLR values, managed identity, and disposal guards.
+  `RuntimeHelpers.GetUninitializedObject` creates only disposed-state wrappers
+  with a null reference field; it creates no Unity reference or JNI handle.
+  These checks do not validate live Java `equals`, `hashCode`, or `toString` dispatch.
 - UNITY_ANDROID runtime **managed compilation** using the actual Unity modules;
   this case does not execute JNI or simulate a Player.
 

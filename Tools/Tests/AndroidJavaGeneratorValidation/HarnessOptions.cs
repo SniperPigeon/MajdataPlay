@@ -20,6 +20,17 @@ namespace MajdataPlay.Tests.AndroidJavaGeneratorValidation
         public string RepositoryRoot { get; private set; }
 
         /// <summary>
+        /// Gets the archived runtime source directory used only by legacy generator regressions.
+        /// </summary>
+        public string LegacyRuntimeDirectory
+        {
+            get
+            {
+                return Path.Combine(RepositoryRoot, "Tools", "Tests", "AndroidJavaGeneratorValidation", "Fixtures", "LegacyRuntime");
+            }
+        }
+
+        /// <summary>
         /// Gets the installed Unity 6000.3.17f1 Editor/Data directory.
         /// </summary>
         public string UnityEditorData { get; private set; }
@@ -102,7 +113,7 @@ namespace MajdataPlay.Tests.AndroidJavaGeneratorValidation
             JavaHome = Environment.GetEnvironmentVariable("UNITY_JAVA_HOME")
                 ?? Path.Combine(UnityEditorData, "PlaybackEngines", "AndroidPlayer", "OpenJDK");
             ExtractorPath = Environment.GetEnvironmentVariable("MAJDATA_JAVA_EXTRACTOR")
-                ?? Path.Combine(RepositoryRoot, "Tools", "AndroidJavaGenerator", "Java", "JavaApiExtractor.java");
+                ?? Path.Combine(RepositoryRoot, "Tools", "CSharp", "AndroidJavaGenerator", "Java", "JavaApiExtractor.java");
         }
 
         /// <summary>
@@ -187,7 +198,7 @@ namespace MajdataPlay.Tests.AndroidJavaGeneratorValidation
             }
             if (!extractorSpecified)
             {
-                options.ExtractorPath = Path.Combine(options.RepositoryRoot, "Tools", "AndroidJavaGenerator", "Java", "JavaApiExtractor.java");
+                options.ExtractorPath = Path.Combine(options.RepositoryRoot, "Tools", "CSharp", "AndroidJavaGenerator", "Java", "JavaApiExtractor.java");
             }
             return options;
         }
@@ -216,6 +227,10 @@ namespace MajdataPlay.Tests.AndroidJavaGeneratorValidation
             RequireFile(ToolPath("jar"));
             RequireFile(ExtractorPath);
             RequireFile(Path.Combine(RepositoryRoot, "Tools", "Tests", "AndroidJavaGeneratorValidation", "Fixtures", "fixtures", "Widget.java"));
+            foreach (var name in new[] { "AndroidJni.cs", "JavaClassAttribute.cs", "JavaApiConfigurationAttribute.cs", "JavaInvocationException.cs", Path.Combine("Runtime", "Java", "Lang", "JavaObject.cs") })
+            {
+                RequireFile(Path.Combine(LegacyRuntimeDirectory, name));
+            }
         }
 
         /// <summary>

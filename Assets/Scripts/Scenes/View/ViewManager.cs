@@ -4,6 +4,7 @@ using MajdataPlay.Scenes.Game;
 using MajdataPlay.Scenes.Game.Notes;
 using MajdataPlay.Scenes.Game.Notes.Controllers;
 using MajdataPlay.IO;
+using MajdataPlay.IO.Storage;
 using MajdataPlay.Numerics;
 using MajdataPlay.Timer;
 using MajdataPlay.Utils;
@@ -76,7 +77,8 @@ namespace MajdataPlay.Scenes.View
 
         float _playbackSpeed = 1f;
 
-        readonly string CACHE_PATH = Path.Combine(MajEnv.CachePath, "View");
+        /// <summary>Stores the view media cache initialized when the component awakens.</summary>
+        private StorageDirectory _cacheDirectory = null!;
 
         // Assets
         static AudioSampleWrap? _audioSample = null;
@@ -100,10 +102,7 @@ namespace MajdataPlay.Scenes.View
         protected override void Awake()
         {
             base.Awake();
-            if(!Directory.Exists(CACHE_PATH))
-            {
-                Directory.CreateDirectory(CACHE_PATH);
-            }
+            _cacheDirectory = MajEnv.CacheDirectory.CreateDirectory("View");
             Majdata<ViewManager>.Instance = this;
             Majdata<INoteController>.Instance = this;
             Majdata<INoteTimeProvider>.Instance = this;
@@ -337,7 +336,7 @@ namespace MajdataPlay.Scenes.View
             {
                 if(_audioSample is not null) _audioSample.Dispose();
                 var sample = await MajInstances.AudioManager.LoadMusicAsync(audioPath, true, true);
-                if (File.Exists(bgPath))
+                if (FileSystem.File.Open(bgPath).Exists)
                 {
                     var cover = await SpriteLoader.LoadFromFileAsync(bgPath);
                     _bgCover = cover;
@@ -365,8 +364,8 @@ namespace MajdataPlay.Scenes.View
             _state = ViewStatus.Busy;
             try
             {
-                var sampleCachePath = Path.Combine(CACHE_PATH, "track.majplay");
-                var videoCachePath = Path.Combine(CACHE_PATH, "video.majplay");
+                var sampleCachePath = Path.Combine(_cacheDirectory.Location, "track.majplay");
+                var videoCachePath = Path.Combine(_cacheDirectory.Location, "video.majplay");
                 await File.WriteAllBytesAsync(sampleCachePath, audio);
 
                 var sample = await MajInstances.AudioManager.LoadMusicAsync(sampleCachePath, true);

@@ -42,12 +42,25 @@ Simple meshes and uses the shared cache for Sliced/Tiled, still ignoring flips.
 See [Translation editor validation](TranslationEditorValidation.md) for the static
 key-analysis regression tests, isolated Unity editor checks, and editor workflow.
 
-## Android Java source generator
+## Android Java bindings and legacy generator
+
+The Unity runtime uses the standalone CLI to generate `Tools/AndroidJavaWrapper/src`
+and compile/install `MajdataPlay.Platform.Android.Runtime.dll` as a Unity plugin.
+See `AndroidJavaWrapperGeneratorValidation/README.md` for generation, namespace
+directory migration, project bootstrap, and production consumer compilation.
+
+```powershell
+Push-Location Tools/Tests/AndroidJavaWrapperGeneratorValidation
+dotnet run --project AndroidJavaWrapperGeneratorValidation.csproj -- --editor-inputs
+Pop-Location
+./Tools/Tests/ValidateAndroidJavaWrapperRefreshUnity.ps1
+```
 
 See `AndroidJavaGeneratorValidation/README.md` for .NET 9 regression tests using
-real Unity reference assemblies and the bundled Android SDK/JDK. See
+real Unity reference assemblies, archived legacy runtime fixtures, and the bundled Android SDK/JDK. See
 `../AndroidJavaGenerator/README.md` for wrapper usage, toolchain configuration,
-documentation provenance, and runtime ownership.
+documentation provenance, and legacy runtime ownership. The analyzer is no longer
+required by the main project's runtime consumers.
 
 ```powershell
 dotnet run --project Tools/Tests/AndroidJavaGeneratorValidation/AndroidJavaGeneratorValidation.csproj
@@ -58,3 +71,73 @@ The second command creates an ignored, isolated Unity 6000.3.17f1 project; it
 verifies real analyzer loading, generated SDK classes/interfaces, readonly
 properties, overload preservation, editor-companion compilation, and the
 non-Android JNI guard. Neither check validates an Android Player or hardware.
+
+## Portable file and directory storage
+
+See `FileSystemValidation/README.md` and
+`../../Assets/Plugins/MajdataPlay/IO/Storage/README.md` for the portable local/opaque-URI
+regressions, Android SAF API, and target/hardware validation limitations.
+
+```powershell
+dotnet run --project Tools/Tests/FileSystemValidation/FileSystemValidation.csproj
+./Tools/Tests/ValidateFileSystemUnity.ps1
+```
+
+The second command stages an ignored isolated Unity 6000.3.17f1 project, checks
+Editor smoke/Android guards, compiles Windows64 and Android player scripts, and
+compiles Android Java sources. It does not exercise SAF on a device or build a player.
+
+## Song storage and collection refresh
+
+See `ChartStorageValidation/README.md` for the package-free .NET 9 regression
+suite linking the production storage, collection and scanning implementations.
+See `SongStorageUnityValidation/README.md` for isolated Unity 6000.3.17f1
+compilation and real MajSimai metadata/chart parsing.
+
+```powershell
+dotnet run --project Tools/Tests/ChartStorageValidation/ChartStorageValidation.csproj
+./Tools/Tests/ValidateSongStorageUnity.ps1 -Repetitions 12
+```
+
+The managed suite repeats 96-collection scans and verifies shared concurrency,
+non-publishing initialization, independent local/online refresh, zero cross-source
+I/O/requests, cached playlist rebinding, cancellation/rollback and retained chart
+references/selection. Portable favorites DB/export hashes are loaded at InitAsync;
+both refreshes use committed hashes and never reload the DB/export. Legacy tests
+explicitly await Local then Online; no production full-refresh API remains.
+The Unity harness uses real parser and UniTask dependencies, also checks
+independent source references and cached definitions, and keeps narrow
+game/media/network/database substitutes in an ignored isolated project. Neither suite validates real devices, native media/SQLite,
+online protocols, Player lifecycle or Android SAF permissions.
+
+## Chart import layout
+
+See `ImportValidation/README.md` for the archive and directory import layout
+regressions of the production `ChartImporter`.
+
+```powershell
+dotnet run --project Tools/Tests/ImportValidation/ImportValidation.csproj
+```
+
+The cases link the production importer and storage sources, so they verify layout
+classification and file effects rather than Unity scene switching, Android SAF
+sources or Player integration.
+
+## Android storage / JNI / IL2CPP device validation
+
+See `AndroidStorageDeviceValidation/README.md` for the isolated test APK and
+`AndroidStorageDeviceValidation/RESULTS.md` for actual ARM64/ARMv7 physical-device
+evidence and the local-provider validation boundary. The main game project is
+not rebuilt or changed by these tools. Unlock the selected authorized device
+and use the system picker to choose only a disposable scratch directory.
+
+```powershell
+./Tools/Tests/Build-AndroidStorageDeviceValidation.ps1 -Architecture Both
+./Tools/Tests/Run-AndroidStorageDeviceValidation.ps1 -Serial '<device-serial>' -Install -Abi arm64-v8a -Mode full
+./Tools/Tests/Run-AndroidStorageDeviceValidation.ps1 -Serial '<device-serial>' -Abi arm64-v8a -Mode replay
+./Tools/Tests/Run-AndroidStorageDeviceValidation.ps1 -Serial '<device-serial>' -Abi arm64-v8a -Mode release
+```
+
+Repeat full/replay/release with `-Install -Abi armeabi-v7a` to verify an actual
+32-bit process. Release only grants newly acquired by the dedicated test app;
+never clear another application's data or delete the selected parent directory.

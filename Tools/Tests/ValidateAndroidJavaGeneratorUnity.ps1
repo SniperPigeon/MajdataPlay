@@ -12,7 +12,7 @@ if ($version -notmatch ('^' + [regex]::Escape($expected) + '(?:_|$)')) {
     throw "Use Unity $expected; the selected executable reports $version."
 }
 if (!$SkipAnalyzerBuild) {
-    & (Join-Path $root 'Tools/AndroidJavaGenerator/build.ps1')
+    & (Join-Path $root 'Tools/CSharp/AndroidJavaGenerator/build.ps1')
 }
 $dll = Join-Path $root 'Temp/AndroidJavaGeneratorBuild/bin/netstandard2.0/MajdataPlay.SourceGenerators.AndroidJava.dll'
 if (!(Test-Path -LiteralPath $dll -PathType Leaf)) {
@@ -21,8 +21,7 @@ if (!(Test-Path -LiteralPath $dll -PathType Leaf)) {
 $project = Join-Path $root 'Temp/AndroidJavaGeneratorUnityValidation'
 $runtime = Join-Path $project 'Assets/Runtime'
 $editor = Join-Path $project 'Assets/Editor'
-$androidEditor = Join-Path $project 'Assets/AndroidEditor'
-foreach ($directory in @($runtime, $editor, $androidEditor, (Join-Path $project 'Packages'), (Join-Path $project 'ProjectSettings'))) {
+foreach ($directory in @($runtime, $editor, (Join-Path $project 'Packages'), (Join-Path $project 'ProjectSettings'))) {
     New-Item -ItemType Directory -Force -Path $directory | Out-Null
 }
 Copy-Item -LiteralPath (Join-Path $root 'ProjectSettings/ProjectVersion.txt') -Destination (Join-Path $project 'ProjectSettings/ProjectVersion.txt')
@@ -31,19 +30,22 @@ Copy-Item -LiteralPath (Join-Path $root 'ProjectSettings/ProjectVersion.txt') -D
     name = 'MajdataPlay.Platform.Android'
     includePlatforms = @('Android', 'Editor')
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runtime 'MajdataPlay.Platform.Android.asmdef')
-foreach ($name in @('JavaObject', 'AndroidJni', 'JavaClassAttribute', 'JavaApiConfigurationAttribute', 'JavaInvocationException')) {
-    Copy-Item -LiteralPath (Join-Path $root "Assets/Plugins/MajdataPlay/Platform/Android/$name.cs") -Destination $runtime
+$legacyRuntime = Join-Path $PSScriptRoot 'AndroidJavaGeneratorValidation/Fixtures/LegacyRuntime'
+foreach ($name in @('AndroidJni', 'JavaClassAttribute', 'JavaApiConfigurationAttribute', 'JavaInvocationException')) {
+    Copy-Item -LiteralPath (Join-Path $legacyRuntime "$name.cs") -Destination $runtime -Force
 }
+Copy-Item -LiteralPath (Join-Path $legacyRuntime 'Runtime/Java/Lang/JavaObject.cs') -Destination $runtime -Force
 Copy-Item -LiteralPath $dll -Destination $runtime
-Copy-Item -LiteralPath (Join-Path $root 'Tools/AndroidJavaGenerator/MajdataPlay.SourceGenerators.AndroidJava.dll.meta') -Destination $runtime
+Copy-Item -LiteralPath (Join-Path $root 'Tools/CSharp/AndroidJavaGenerator/MajdataPlay.SourceGenerators.AndroidJava.dll.meta') -Destination $runtime
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'AndroidJavaGeneratorUnityValidation.cs') -Destination $editor
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'AndroidJavaGeneratorUnityBindings.cs') -Destination $runtime
-@{
-    name = 'MajdataPlay.Platform.Android.Editor'
-    references = @('MajdataPlay.Platform.Android')
-    includePlatforms = @('Editor')
-} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $androidEditor 'MajdataPlay.Platform.Android.Editor.asmdef')
-Copy-Item -LiteralPath (Join-Path $root 'Assets/Plugins/MajdataPlay/Platform/Android/Editor/JavaWrapperRefresh.cs') -Destination $androidEditor
+# Earlier runs staged the production refresh controller, which belongs to the new CLI workflow.
+foreach ($name in @('JavaWrapperRefresh.cs', 'JavaWrapperRefresh.cs.meta', 'MajdataPlay.Platform.Android.Editor.asmdef', 'MajdataPlay.Platform.Android.Editor.asmdef.meta')) {
+    $obsolete = Join-Path (Join-Path $project 'Assets/AndroidEditor') $name
+    if (Test-Path -LiteralPath $obsolete -PathType Leaf) {
+        Remove-Item -LiteralPath $obsolete -Force
+    }
+}
 $editorData = Join-Path (Split-Path -Parent $UnityPath) 'Data'
 $variables = @('UNITY_ANDROID_SDK', 'UNITY_JAVA_HOME', 'MAJDATA_JAVA_EXTRACTOR')
 $oldValues = @{}
@@ -53,7 +55,7 @@ foreach ($name in $variables) {
 try {
     $env:UNITY_ANDROID_SDK = Join-Path $editorData 'PlaybackEngines/AndroidPlayer/SDK'
     $env:UNITY_JAVA_HOME = Join-Path $editorData 'PlaybackEngines/AndroidPlayer/OpenJDK'
-    $env:MAJDATA_JAVA_EXTRACTOR = Join-Path $root 'Tools/AndroidJavaGenerator/Java/JavaApiExtractor.java'
+    $env:MAJDATA_JAVA_EXTRACTOR = Join-Path $root 'Tools/CSharp/AndroidJavaGenerator/Java/JavaApiExtractor.java'
     $log = Join-Path $project 'validation.log'
     $process = Start-Process -FilePath $UnityPath -WindowStyle Hidden -ArgumentList @(
         '-batchmode', '-nographics', '-projectPath', "`"$project`"", '-executeMethod',

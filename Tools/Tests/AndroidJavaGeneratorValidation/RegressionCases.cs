@@ -3,8 +3,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using MajdataPlay.Platform.Android;
+using MajdataPlay.Platform.Android.Runtime.Java.Lang;
 using Microsoft.CodeAnalysis;
 
 namespace MajdataPlay.Tests.AndroidJavaGeneratorValidation
@@ -19,12 +22,16 @@ namespace MajdataPlay.Tests.AndroidJavaGeneratorValidation
         /// </summary>
         public static readonly string[] Names =
         {
-            "source-api", "explicit-java-object-base", "class-api", "jar-api", "inner-descriptor-parity", "assembly-configuration", "configuration-precedence",
+            "source-api", "explicit-java-object-base", "wrapper-base-inheritance", "constructor-visibility", "sdk-constructors", "class-api", "jar-api", "inner-descriptor-parity", "assembly-configuration", "configuration-precedence",
+            "static-class-mapping", "static-class-user-conflicts",
+            "unity-data-paths", "unity-data-managed-references", "unity-data-player-references", "unity-data-editor-paths", "unity-data-missing",
             "classpath-only", "documentation-path-array", "no-inherited", "determinism", "source-refresh", "android-symbol-compilation",
             "invalid-nonpartial", "invalid-static", "invalid-nested", "invalid-generic", "duplicate-mapping",
             "missing-java-type", "missing-dependency", "missing-source", "missing-classpath", "missing-documentation",
             "missing-sdk", "missing-platform", "missing-jdk", "missing-extractor", "negative-api",
-            "member-collisions", "user-member-collision", "runtime-map-array", "runtime-platform-guard"
+            "member-collisions", "user-member-collision", "object-overrides-source", "object-overrides-class", "object-overrides-jar",
+            "object-overrides-no-inherited", "object-overrides-sdk", "object-overrides-user-conflicts",
+            "runtime-map-array", "runtime-platform-guard", "runtime-object-semantics"
         };
 
         /// <summary>
@@ -46,6 +53,23 @@ namespace MajdataPlay.Tests.AndroidJavaGeneratorValidation
                 AssertPlatformGuard();
                 return;
             }
+            if (name == "runtime-object-semantics")
+            {
+                AssertJavaObjectApi();
+                AssertJavaObjectManagedComparisons();
+                AssertJavaObjectOperatorShortcuts();
+                return;
+            }
+            if (name.StartsWith("unity-data-", StringComparison.Ordinal))
+            {
+                ConfigurationPathCases.Run(name, workspace);
+                return;
+            }
+            if (name.StartsWith("object-overrides-", StringComparison.Ordinal))
+            {
+                ObjectOverrideCases.Run(name, workspace);
+                return;
+            }
             var runner = new GeneratorRunner(workspace);
             switch (name)
             {
@@ -54,9 +78,24 @@ namespace MajdataPlay.Tests.AndroidJavaGeneratorValidation
                     break;
                 case "explicit-java-object-base":
                     var explicitBaseSource = runner.RootDeclarations(workspace.SourceFiles(), workspace.DocumentationPaths);
-                    explicitBaseSource = explicitBaseSource.Replace("public partial class WidgetWrapper", "public partial class WidgetWrapper : global::MajdataPlay.Platform.Android.JavaObject");
+                    explicitBaseSource = explicitBaseSource.Replace("public partial class WidgetWrapper", "public partial class WidgetWrapper : global::MajdataPlay.Platform.Android.Runtime.Java.Lang.JavaObject");
                     var explicitBaseRun = runner.Run(runner.CreateCompilation(explicitBaseSource, name), name);
                     ApiAssertions.AssertRootApi(explicitBaseRun);
+                    break;
+                case "constructor-visibility":
+                    AssertConstructorVisibility(runner, workspace, name);
+                    break;
+                case "wrapper-base-inheritance":
+                    AssertWrapperBaseInheritance(runner, name);
+                    break;
+                case "static-class-mapping":
+                    AssertClassMapping(runner, workspace, name);
+                    break;
+                case "static-class-user-conflicts":
+                    AssertClassUserConflicts(runner, workspace, name);
+                    break;
+                case "sdk-constructors":
+                    AssertSdkConstructors(runner, workspace, name);
                     break;
                 case "class-api":
                     RunApi(runner, workspace.ClassFiles(), workspace, name);
@@ -197,6 +236,212 @@ namespace MajdataPlay.Tests.AndroidJavaGeneratorValidation
             var source = runner.RootDeclarations(sources, workspace.DocumentationPaths, includeInherited, assemblyConfiguration);
             var run = runner.Run(runner.CreateCompilation(source, name), name);
             ApiAssertions.AssertRootApi(run, includeInherited);
+            AssertObjectMembers(run);
+        }
+
+        /// <summary>
+        /// Requires ordinary Java Object methods to use inherited JavaObject CLR overrides without duplicate aliases.
+        /// </summary>
+        /// <param name="run">The completed fixture wrapper generation.</param>
+        /// <exception cref="InvalidOperationException">An alias is emitted or a wrapper replaces an inherited CLR override unexpectedly.</exception>
+        private static void AssertObjectMembers(GeneratorRun run)
+        {
+            var widget = ApiAssertions.Type(run, "WidgetWrapper");
+            foreach (var name in new[] { "Equals", "GetHashCode", "ToString" })
+            {
+                Check.Equal(0, widget.GetMembers(name).Length, "Generated wrappers must inherit JavaObject." + name + ".");
+                var member = widget.BaseType!.GetMembers(name).OfType<IMethodSymbol>().Single();
+                Check.True(member.IsOverride && member.OverriddenMethod?.ContainingType.SpecialType == SpecialType.System_Object,
+                    "JavaObject." + name + " must override the CLR Object member.");
+            }
+            foreach (var name in new[] { "EqualsJavaMethod", "HashCode", "ToStringJavaMethod" })
+            {
+                Check.Equal(0, widget.GetMembers(name).Length, "Java Object alias must not be emitted: " + name);
+            }
+        }
+
+        /// <summary>
+        /// Checks constructor visibility and implicit defaults in source, class-file, and jar inputs.
+        /// </summary>
+        /// <param name="runner">The real generator driver factory.</param>
+        /// <param name="workspace">The prepared Java fixtures and toolchain.</param>
+        /// <param name="name">The isolated case name.</param>
+        /// <exception cref="InvalidOperationException">Generation fails or a constructor visibility assertion fails.</exception>
+        private static void AssertConstructorVisibility(GeneratorRunner runner, FixtureWorkspace workspace, string name)
+        {
+            var types = new[]
+            {
+                new KeyValuePair<string, string>("fixtures.ConstructorVisibility$Mixed", "MixedWrapper"),
+                new KeyValuePair<string, string>("fixtures.ConstructorVisibility$NoPublic", "NoPublicWrapper"),
+                new KeyValuePair<string, string>("fixtures.ConstructorVisibility$Parameterized", "ParameterizedWrapper"),
+                new KeyValuePair<string, string>("fixtures.ConstructorVisibility$Default", "DefaultWrapper"),
+                new KeyValuePair<string, string>("fixtures.ConstructorVisibility$Abstract", "PublicAbstractWrapper"),
+                new KeyValuePair<string, string>("fixtures.AbstractWidget", "ProtectedAbstractWrapper"),
+                new KeyValuePair<string, string>("fixtures.Contract", "InterfaceWrapper"),
+                new KeyValuePair<string, string>("fixtures.Mode", "EnumWrapper")
+            };
+            var representations = new[] { workspace.SourceFiles(), workspace.ClassFiles(), new[] { workspace.JarPath } };
+            for (var index = 0; index < representations.Length; index++)
+            {
+                var mode = name + "-" + index;
+                var declaration = ConstructorDeclarations(workspace, representations[index], types);
+                var run = runner.Run(runner.CreateCompilation(declaration, mode), mode);
+                ApiAssertions.AssertConstructorVisibility(run);
+            }
+        }
+
+        /// <summary>
+        /// Checks constructor generation directly against the selected Android SDK without custom Java inputs.
+        /// </summary>
+        /// <param name="runner">The real generator driver factory.</param>
+        /// <param name="workspace">The prepared SDK and JDK configuration.</param>
+        /// <param name="name">The isolated case name.</param>
+        /// <exception cref="InvalidOperationException">Generation fails or an SDK constructor assertion fails.</exception>
+        private static void AssertSdkConstructors(GeneratorRunner runner, FixtureWorkspace workspace, string name)
+        {
+            var types = new[]
+            {
+                new KeyValuePair<string, string>("android.content.Intent", "IntentWrapper"),
+                new KeyValuePair<string, string>("android.os.Looper", "LooperWrapper"),
+                new KeyValuePair<string, string>("java.lang.Runnable", "RunnableWrapper"),
+                new KeyValuePair<string, string>("java.io.InputStream", "InputStreamWrapper")
+            };
+            var declaration = ConstructorDeclarations(workspace, Array.Empty<string>(), types);
+            var run = runner.Run(runner.CreateCompilation(declaration, name), name);
+            ApiAssertions.AssertSdkConstructors(run);
+        }
+
+        /// <summary>
+        /// Checks that an annotated wrapper may derive from another annotated wrapper and inherits its Java overrides.
+        /// </summary>
+        /// <param name="runner">The real generator driver factory.</param>
+        /// <param name="name">The isolated case name.</param>
+        /// <exception cref="InvalidOperationException">Generation fails or an inheritance assertion fails.</exception>
+        private static void AssertWrapperBaseInheritance(GeneratorRunner runner, string name)
+        {
+            var source = "#nullable enable\r\nusing MajdataPlay.Platform.Android;\r\n"
+                + "[assembly: JavaApiConfiguration(ApiLevel = 36, IncludeInheritedMembers = false)]\r\n"
+                + "namespace Fixtures.Wrappers\r\n{\r\n"
+                + "    [JavaClass(\"java.lang.Number\")]\r\n    public partial class NumberWrapper\r\n    {\r\n    }\r\n"
+                + "    [JavaClass(\"java.lang.Integer\")]\r\n    public partial class IntegerWrapper : NumberWrapper\r\n    {\r\n    }\r\n"
+                + "}\r\n";
+            var run = runner.Run(runner.CreateCompilation(source, name), name);
+            run.AssertCompiles();
+            var number = ApiAssertions.Type(run, "NumberWrapper");
+            var integer = ApiAssertions.Type(run, "IntegerWrapper");
+            Check.True(SymbolEqualityComparer.Default.Equals(integer.BaseType, number),
+                "An annotated wrapper must be usable as the generated C# base class.");
+            Check.Equal("MajdataPlay.Platform.Android.Runtime.Java.Lang.JavaObject", number.BaseType?.ToDisplayString(),
+                "The annotated base wrapper must still derive from the runtime JavaObject.");
+            ApiAssertions.AssertClassProperty(number);
+            ApiAssertions.AssertClassProperty(integer);
+            var numberName = (IFieldSymbol)Check.NotNull(integer.GetMembers("JavaClassName").SingleOrDefault(),
+                "the derived JavaClassName constant");
+            var baseName = (IFieldSymbol)Check.NotNull(number.GetMembers("JavaClassName").SingleOrDefault(),
+                "the base JavaClassName constant");
+            Check.Equal("java.lang.Integer", numberName.ConstantValue as string, "The derived wrapper's Java class name constant");
+            Check.Equal("java.lang.Number", baseName.ConstantValue as string, "The base wrapper's Java class name constant");
+            Check.Equal(0, integer.GetMembers("IntValue").Length,
+                "A Java override already generated on the base wrapper must not be repeated on the derived wrapper.");
+            Check.Equal(1, number.GetMembers("IntValue").Length, "The base wrapper must keep its Java override member.");
+            Check.True(integer.InstanceConstructors.Any(constructor => !constructor.IsImplicitlyDeclared &&
+                    constructor.Parameters.Length == 1 && constructor.Parameters[0].Type.SpecialType == SpecialType.System_Int32),
+                "The derived wrapper must keep the Java constructor that creates its own Java instance.");
+            Check.True(integer.GetMembers("ToString").OfType<IMethodSymbol>().Any(method => method.IsStatic && method.Parameters.Length == 1),
+                "A Java toString overload must keep the natural C# ToString name instead of a renamed alias.");
+            Check.Equal(0, integer.GetMembers("ToStringJavaMethod").Length,
+                "A renamed Object method alias must not be emitted.");
+            Check.True(run.GeneratedSources.Values.Any(generated => generated.Contains("Construct(\"java.lang.Integer\"", StringComparison.Ordinal)),
+                "A derived wrapper constructor must create the Java instance before adopting it through the base wrapper.");
+            Check.True(!run.Output.GetDiagnostics().Any(diagnostic =>
+                    diagnostic.Id == "CS0108" || diagnostic.Id == "CS0109" || diagnostic.Id == "CS0114"),
+                "A derived wrapper must not hide base members without an explicit modifier.\r\n" + run.DescribeDiagnostics());
+
+            var renamedSource = source.Replace("public partial class NumberWrapper",
+                "public partial class Class : ObjectWrapper").Replace("IntegerWrapper : NumberWrapper", "IntegerWrapper : Class");
+            renamedSource = renamedSource.Replace("    [JavaClass(\"java.lang.Number\")]",
+                "    [JavaClass(\"java.lang.Object\")]\r\n    public partial class ObjectWrapper\r\n    {\r\n    }\r\n"
+                + "    [JavaClass(\"java.lang.Number\")]");
+            var renamedRun = runner.Run(runner.CreateCompilation(renamedSource, name + "-class-name"), name + "-class-name");
+            renamedRun.AssertCompiles();
+            ApiAssertions.AssertClassProperty(ApiAssertions.Type(renamedRun, "Class"), propertyName: "ClassJavaProperty");
+            ApiAssertions.AssertClassProperty(ApiAssertions.Type(renamedRun, "IntegerWrapper"));
+            Check.True(!renamedRun.Output.GetDiagnostics().Any(diagnostic =>
+                    diagnostic.Id == "CS0108" || diagnostic.Id == "CS0109" || diagnostic.Id == "CS0114"),
+                "Class must explicitly hide any generated ancestor property, including across a wrapper named Class.\r\n" + renamedRun.DescribeDiagnostics());
+        }
+
+        /// <summary>
+        /// Checks mapped class-literal result types, including a C# wrapper named Class.
+        /// </summary>
+        /// <param name="runner">The production generator driver factory.</param>
+        /// <param name="workspace">The selected Android SDK configuration.</param>
+        /// <param name="name">The isolated regression case name.</param>
+        /// <exception cref="InvalidOperationException">Generation fails or a class-literal property has the wrong type or name.</exception>
+        private static void AssertClassMapping(GeneratorRunner runner, FixtureWorkspace workspace, string name)
+        {
+            foreach (var className in new[] { "ClassWrapper", "Class" })
+            {
+                var types = new[]
+                {
+                    new KeyValuePair<string, string>("java.lang.Class", className),
+                    new KeyValuePair<string, string>("java.lang.Number", "NumberWrapper")
+                };
+                var caseName = name + "-" + className;
+                var source = ConstructorDeclarations(workspace, Array.Empty<string>(), types);
+                var run = runner.Run(runner.CreateCompilation(source, caseName), caseName);
+                run.AssertCompiles();
+                var returnType = "Fixtures.Wrappers." + className;
+                ApiAssertions.AssertClassProperty(ApiAssertions.Type(run, "NumberWrapper"), returnType);
+                ApiAssertions.AssertClassProperty(ApiAssertions.Type(run, className), returnType,
+                    className == "Class" ? "ClassJavaProperty" : "Class");
+                Check.True(run.GeneratedSources.Values.All(generated => generated.Contains("AndroidJni.Wrap<global::" + returnType + ">", StringComparison.Ordinal)),
+                    "Mapped java.lang.Class results must adopt their references through the exception-safe wrapper factory.");
+            }
+        }
+
+        /// <summary>
+        /// Requires handwritten properties, fields, and methods to produce actionable class-property conflicts.
+        /// </summary>
+        /// <param name="runner">The production generator driver factory.</param>
+        /// <param name="workspace">The prepared Java fixture inputs.</param>
+        /// <param name="name">The isolated regression case name.</param>
+        /// <exception cref="InvalidOperationException">A handwritten member is overwritten or a conflict is not diagnosed.</exception>
+        private static void AssertClassUserConflicts(GeneratorRunner runner, FixtureWorkspace workspace, string name)
+        {
+            var members = new[] { "public int Class { get; }", "public int Class;", "public void Class()\r\n        {\r\n        }", "public int ClassJavaProperty { get; }" };
+            for (var index = 0; index < members.Length; index++)
+            {
+                var wrapperName = index == 3 ? "Class" : "InvalidWrapper";
+                var declaration = "public partial class " + wrapperName;
+                var source = SingleDeclaration(workspace, "fixtures.Widget", declaration);
+                source = source.Replace(declaration + "\r\n    {", declaration + "\r\n    {\r\n        " + members[index]);
+                var caseName = name + "-" + index;
+                var run = runner.Run(runner.CreateCompilation(source, caseName), caseName);
+                run.AssertDiagnostic("AJG008");
+                Check.Equal(0, run.GeneratedSources.Count, "A handwritten Class member must suppress generation rather than produce duplicate C# members.");
+            }
+        }
+
+        /// <summary>
+        /// Creates shared-configuration wrapper declarations for a bounded constructor regression.
+        /// </summary>
+        /// <param name="workspace">The selected SDK API and fixture configuration.</param>
+        /// <param name="sources">The custom Java inputs, or an empty array for SDK-only requests.</param>
+        /// <param name="types">The Java binary names and corresponding C# wrapper names.</param>
+        /// <returns>The nullable-enabled wrapper declarations without inherited Java members.</returns>
+        private static string ConstructorDeclarations(FixtureWorkspace workspace, string[] sources, IEnumerable<KeyValuePair<string, string>> types)
+        {
+            var builder = new StringBuilder("#nullable enable\r\nusing MajdataPlay.Platform.Android;\r\n");
+            builder.Append("[assembly: JavaApiConfiguration(Sources = ").Append(GeneratorRunner.StringArray(sources))
+                .Append(", ApiLevel = ").Append(workspace.Options.ApiLevel).Append(", IncludeInheritedMembers = false)]\r\n")
+                .Append("namespace Fixtures.Wrappers\r\n{\r\n");
+            foreach (var type in types)
+            {
+                builder.Append("    [JavaClass(").Append(GeneratorRunner.Literal(type.Key)).Append(")]\r\n")
+                    .Append("    public partial class ").Append(type.Value).Append("\r\n    {\r\n    }\r\n");
+            }
+            return builder.Append("}\r\n").ToString();
         }
 
         /// <summary>
@@ -438,11 +683,170 @@ namespace MajdataPlay.Tests.AndroidJavaGeneratorValidation
         /// </summary>
         private static void AssertPlatformGuard()
         {
+            Check.Throws<PlatformNotSupportedException>(() => AndroidJni.GetClass("fixtures.Widget"), "GetClass outside Android");
             Check.Throws<PlatformNotSupportedException>(() => AndroidJni.Construct("fixtures.Widget", "()V"), "Construct outside Android");
             Check.Throws<PlatformNotSupportedException>(() => AndroidJni.Call<int>(null, "fixtures.Widget", "intValue", "(I)I", 1), "generic Call outside Android");
             Check.Throws<PlatformNotSupportedException>(() => AndroidJni.Call(null, "fixtures.Widget", "consume", "(I)V", 1), "void Call outside Android");
             Check.Throws<PlatformNotSupportedException>(() => AndroidJni.GetField<int>(null, "fixtures.Widget", "mutableCount", "I"), "GetField outside Android");
+            Check.Throws<PlatformNotSupportedException>(() => new JavaObject(), "parameterless JavaObject construction outside Android");
             Check.Throws<ArgumentNullException>(() => new ManagedOnlyWrapper(null!), "null borrowed Java reference");
+        }
+
+        /// <summary>
+        /// Requires the CLR overrides and nullable wrapper operators to be public members of JavaObject.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">A required override, operator, or nullable annotation is absent.</exception>
+        private static void AssertJavaObjectApi()
+        {
+            var nullable = new NullabilityInfoContext();
+            var equals = AssertJavaObjectOverride("Equals", typeof(bool), new[] { typeof(object) });
+            Check.Equal(NullabilityState.Nullable, nullable.Create(equals.GetParameters().Single()).ReadState,
+                "JavaObject.Equals nullable Object parameter");
+            AssertJavaObjectOverride("GetHashCode", typeof(int), Type.EmptyTypes);
+            var toString = AssertJavaObjectOverride("ToString", typeof(string), Type.EmptyTypes);
+            Check.Equal(NullabilityState.Nullable, nullable.Create(toString.ReturnParameter).ReadState,
+                "JavaObject.ToString nullable Java string result");
+            foreach (var name in new[] { "op_Equality", "op_Inequality" })
+            {
+                var method = Check.NotNull(typeof(JavaObject).GetMethod(name,
+                    BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly), "JavaObject " + name);
+                Check.True(method.IsSpecialName && method.ReturnType == typeof(bool), name + " must be a Boolean operator.");
+                var parameters = method.GetParameters();
+                Check.Equal(2, parameters.Length, name + " wrapper parameter count");
+                foreach (var parameter in parameters)
+                {
+                    Check.Equal(typeof(JavaObject), parameter.ParameterType, name + " wrapper parameter type");
+                    Check.Equal(NullabilityState.Nullable, nullable.Create(parameter).ReadState,
+                        name + " nullable wrapper parameter");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Finds a declared JavaObject member and requires it to override the corresponding CLR Object method.
+        /// </summary>
+        /// <param name="name">The CLR Object method name.</param>
+        /// <param name="returnType">The expected CLR return type.</param>
+        /// <param name="parameterTypes">The expected CLR parameter types.</param>
+        /// <returns>The verified JavaObject override.</returns>
+        /// <exception cref="InvalidOperationException">The method is missing or does not override the expected CLR member.</exception>
+        private static MethodInfo AssertJavaObjectOverride(string name, Type returnType, Type[] parameterTypes)
+        {
+            var method = Check.NotNull(typeof(JavaObject).GetMethod(name,
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, binder: null,
+                types: parameterTypes, modifiers: null), "JavaObject." + name);
+            Check.True(method.IsVirtual && method.GetBaseDefinition().DeclaringType == typeof(object),
+                "JavaObject." + name + " must override CLR Object.");
+            Check.Equal(returnType, method.ReturnType, "JavaObject." + name + " return type");
+            return method;
+        }
+
+        /// <summary>
+        /// Checks null, managed identity, and disposal comparisons without constructing a Unity Java reference.
+        /// </summary>
+        /// <remarks>
+        /// Uninitialized wrappers contain no AndroidJavaObject or JNI handle. Their null reference field
+        /// models only the disposed state; they must never be used to claim live JNI dispatch coverage.
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">A comparison or disposal guard violates its managed contract.</exception>
+        private static void AssertJavaObjectManagedComparisons()
+        {
+            using var first = (JavaObject)RuntimeHelpers.GetUninitializedObject(typeof(JavaObject));
+            using var second = (JavaObject)RuntimeHelpers.GetUninitializedObject(typeof(JavaObject));
+            var alias = first;
+            JavaObject? absent = null;
+            var absentAlias = absent;
+            Check.True(absent == absentAlias && !(absent != absentAlias), "Two null wrappers must compare equal.");
+            Check.True(first == alias && !(first != alias), "Managed aliases must compare equal without JNI.");
+            Check.True(first != absent && absent != first && !(first == absent) && !(absent == first),
+                "A disposed wrapper and null must compare unequal in both operand orders without JNI.");
+            Check.True(first.Equals(first) && ((object)first).Equals(alias),
+                "Both direct and CLR Object equality must preserve disposed managed identity.");
+            Check.True(!first.Equals(null) && !first.Equals(new object()) && !first.Equals(string.Empty) && !first.Equals(0),
+                "Null and unrelated CLR objects must compare unequal without JNI.");
+            var disposedFirst = Check.NotNull(first, "disposed wrapper after nullable comparisons");
+            Check.Throws<ObjectDisposedException>(() => disposedFirst.Equals(second), "Distinct disposed wrapper Equals");
+            Check.Throws<ObjectDisposedException>(() => second.Equals(disposedFirst), "Reversed disposed wrapper Equals");
+            Check.Throws<ObjectDisposedException>(() =>
+            {
+                _ = disposedFirst == second;
+            }, "Distinct disposed wrapper equality operator");
+            Check.Throws<ObjectDisposedException>(() =>
+            {
+                _ = second == disposedFirst;
+            }, "Reversed disposed wrapper equality operator");
+            Check.Throws<ObjectDisposedException>(() =>
+            {
+                _ = disposedFirst != second;
+            }, "Distinct disposed wrapper inequality operator");
+            Check.Throws<ObjectDisposedException>(() => disposedFirst.GetHashCode(), "Disposed wrapper Java hashCode");
+            Check.Throws<ObjectDisposedException>(() => disposedFirst.ToString(), "Disposed wrapper Java toString");
+            disposedFirst.Dispose();
+            disposedFirst.Dispose();
+            Check.True(disposedFirst.Equals(alias) && disposedFirst == alias && disposedFirst != absent,
+                "Repeated disposal must preserve managed identity and null comparisons.");
+        }
+
+        /// <summary>
+        /// Requires identity and either null operand to bypass a derived CLR equality override.
+        /// </summary>
+        /// <remarks>Uninitialized trap wrappers contain no Unity Java reference and exercise managed dispatch only.</remarks>
+        /// <exception cref="InvalidOperationException">An operator invokes the override for an identity or null comparison.</exception>
+        private static void AssertJavaObjectOperatorShortcuts()
+        {
+            using var first = (ManagedEqualityTrap)RuntimeHelpers.GetUninitializedObject(typeof(ManagedEqualityTrap));
+            using var second = (ManagedEqualityTrap)RuntimeHelpers.GetUninitializedObject(typeof(ManagedEqualityTrap));
+            var alias = first;
+            JavaObject? absent = null;
+            Check.True(first == alias && !(first != alias), "Managed identity must bypass a derived Equals override.");
+            Check.True(!(first == absent) && first != absent, "A null right operand must bypass a derived Equals override.");
+            Check.True(!(absent == first) && absent != first, "A null left operand must bypass a derived Equals override.");
+            Check.Throws<InvalidOperationException>(() =>
+            {
+                _ = first == second;
+            }, "Distinct non-null operands must dispatch the derived Equals override");
+            Check.Throws<InvalidOperationException>(() =>
+            {
+                _ = first != second;
+            }, "Distinct non-null inequality must dispatch the derived Equals override");
+        }
+
+        /// <summary>
+        /// Detects unwanted virtual equality dispatch without creating a Unity Java reference.
+        /// </summary>
+        /// <remarks>Tests instantiate only the uninitialized disposed state and never invoke this type's constructor.</remarks>
+        private sealed class ManagedEqualityTrap : JavaObject
+        {
+            /// <summary>
+            /// Provides the ordinary borrowed-reference constructor required for a JavaObject-derived wrapper.
+            /// </summary>
+            /// <param name="value">The non-null Unity Java reference to borrow; tests do not invoke this constructor.</param>
+            /// <exception cref="ArgumentNullException">The supplied reference is null.</exception>
+            public ManagedEqualityTrap(UnityEngine.AndroidJavaObject value)
+                : base(value, ownsReference: false)
+            {
+            }
+
+            /// <summary>
+            /// Throws to expose any virtual equality dispatch performed by an operator.
+            /// </summary>
+            /// <param name="obj">The comparison operand forwarded by the operator.</param>
+            /// <returns>This trap never returns a comparison result.</returns>
+            /// <exception cref="InvalidOperationException">Always thrown when virtual equality is invoked.</exception>
+            public override bool Equals(object? obj)
+            {
+                throw new InvalidOperationException("Managed equality override was invoked.");
+            }
+
+            /// <summary>
+            /// Rejects hash computation for this equality-dispatch-only fixture.
+            /// </summary>
+            /// <returns>This trap never returns a hash code.</returns>
+            /// <exception cref="InvalidOperationException">Always thrown when hash computation is invoked.</exception>
+            public override int GetHashCode()
+            {
+                throw new InvalidOperationException("Managed equality fixture has no hash code.");
+            }
         }
 
         /// <summary>
