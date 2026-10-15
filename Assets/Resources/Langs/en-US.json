@@ -334,6 +334,8 @@
     "MAJTEXT_ONLINE_METHOD_NOT_ALLOWED": "Request not allowed (HTTP 405). Try changing your online source or using a proxy.",
     "MAJTEXT_ONLINE_USERNAME_OR_PASSWORD_INCORRECT": "Authentication failed. Please check your username and password.",
     "MAJTEXT_ONLINE_ACCESS_FORBIDDEN": "Access forbidden. You may need to verify your account via email.",
+    "MAJTEXT_ONLINE_ACCOUNT_PENDING_VERIFICATION": "This legacy account is not activated. Please contact an administrator.",
+    "MAJTEXT_ONLINE_ACCOUNT_BANNED": "This account has been banned.",
     "MAJTEXT_PRESS_ANY_KEY": "TOUCH TO START",
     "MAJTEXT_SAY": " says:",
     "MAJTEXT_SCANNING_CHARTS": "Scanning charts",
