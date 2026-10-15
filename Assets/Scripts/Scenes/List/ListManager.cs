@@ -494,6 +494,7 @@ namespace MajdataPlay.Scenes.List
             {
                 _coverListManager.SelectedSong
             };
+            RecommendImpressions.Commit(_collectionListManager.SelectedCollection, _coverListManager.SelectedSong);
             _ = SongStorage.RefreshStaleRecommendAsync();
             var info = new GameInfo(GameMode.Normal, charts, levels);
             Majdata<GameInfo>.Instance = info;
@@ -512,6 +513,7 @@ namespace MajdataPlay.Scenes.List
             {
                 _coverListManager.SelectedSong
             };
+            RecommendImpressions.Commit(_collectionListManager.SelectedCollection, _coverListManager.SelectedSong);
             _ = SongStorage.RefreshStaleRecommendAsync();
             var oldinfo = Majdata<GameInfo>.Instance;
             var info = new GameInfo(GameMode.Practice, charts, levels, 114514);

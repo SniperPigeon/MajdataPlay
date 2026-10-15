@@ -59,6 +59,7 @@ namespace MajdataPlay.Net
         public const string API_POST_MACHINE_REGISTER = "machine/register";
         public const string API_POST_AUTH_REQUEST = "machine/auth/request";
         public const string API_POST_AUTH_REVOKE = "machine/auth/revoke";
+        public const string API_POST_RECOMMEND_IMPRESSIONS = "recommend/impressions";
 
         // Same value as ImpressionSources.PlayFeed on the server; keeps Play impressions apart from the website's
         public const string RECOMMEND_SOURCE = "play-feed";
@@ -795,6 +796,22 @@ namespace MajdataPlay.Net
 
             return null;
         }
+        /// <summary>
+        /// Reports recommended charts the player has seen. Statistics only: sent once and dropped on failure.
+        /// </summary>
+        public static async ValueTask<EndpointResponse> PostRecommendImpressionsAsync(ApiEndpoint apiEndpoint, string[] chartHashes, CancellationToken token = default)
+        {
+            await UniTask.SwitchToThreadPool();
+            var uri = apiEndpoint.Url.Combine(API_POST_RECOMMEND_IMPRESSIONS);
+            var report = new RecommendImpressionReport
+            {
+                Source = RECOMMEND_SOURCE,
+                ChartHashes = chartHashes
+            };
+            var json = await Serializer.Json.SerializeAsync(report, _defaultJsonSerializer);
+
+            return await PostAsync(uri, new StringContent(json, Encoding.UTF8, "application/json"), token, MajEnv.BackgroundHttpClient);
+        }
 
         /// <param name="avatarId">AvatarId of the user's profile; null or empty if the user has no avatar</param>
         public static async ValueTask<Sprite?> GetAvatarAsync(ApiEndpoint apiEndpoint, string? avatarId, CancellationToken token = default, Action<string, bool>? onError = null)
@@ -965,11 +982,11 @@ namespace MajdataPlay.Net
         {
             return PostAsync(uri, new ByteArrayContent(content.Array, content.Offset, content.Count), token);
         }
-        static async ValueTask<EndpointResponse> PostAsync(Uri uri, HttpContent? content, CancellationToken token = default)
+        static async ValueTask<EndpointResponse> PostAsync(Uri uri, HttpContent? content, CancellationToken token = default, HttpClient? client = null)
         {
             try
             {
-                var client = MajEnv.SharedHttpClient;
+                client ??= MajEnv.SharedHttpClient;
                 var rsp = await (content is null ? client.PostAsync(uri, new StringContent(string.Empty, Encoding.UTF8, "application/json"), token) : client.PostAsync(uri, content, token));
                 var buffer = await rsp.Content.ReadAsByteArrayAsync();
                 var epRsp = default(EndpointResponse);
@@ -1189,6 +1206,14 @@ namespace MajdataPlay.Net
             {
                 return _lock.LockAsync(token);
             }
+        }
+        [Preserve]
+        readonly struct RecommendImpressionReport
+        {
+            [Preserve]
+            public string Source { get; init; }
+            [Preserve]
+            public string[] ChartHashes { get; init; }
         }
         [Preserve]
         readonly struct NetStatus
