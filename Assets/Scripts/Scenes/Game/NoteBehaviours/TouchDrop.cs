@@ -89,7 +89,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
 
             Transform.position = new Vector3(0, 0, 0);
             SetFansColor(new Color(1f, 1f, 1f, 0f));
-            SetFansPosition(0.4f);
+            SetFansPosition(TouchFanStartDistance);
 
             SetActiveWithRenderer(false);
 
@@ -145,7 +145,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             //_justBorderObject.SetActive(false);
 
             SetFansColor(new Color(1f, 1f, 1f, 0f));
-            SetFansPosition(0.4f);
+            SetFansPosition(TouchFanStartDistance);
             SetActiveWithoutRenderer(true);
 
             for (var i = 0; i < 4; i++)
@@ -418,7 +418,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                     case NoteStatus.Running:
                         {
                             var pow = -Mathf.Exp(8 * (timing * 0.43f / _moveDuration) - 0.85f) + 0.42f;
-                            var distance = Mathf.Clamp(pow, 0f, 0.4f);
+                            var distance = Mathf.Clamp(pow * TouchFadeInRatio, 0f, TouchFanStartDistance);
                             if (float.IsNaN(distance))
                             {
                                 distance = 0f;
@@ -427,7 +427,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                             if (timing >= 0)
                             {
                                 var _pow = -Mathf.Exp(-0.85f) + 0.42f;
-                                var _distance = Mathf.Clamp(_pow, 0f, 0.4f);
+                                var _distance = Mathf.Clamp(_pow * TouchFadeInRatio, 0f, TouchFanStartDistance);
                                 SetFansPosition(_distance);
                                 SetJustBorderActive(true);
                                 State = NoteStatus.Arrived;
