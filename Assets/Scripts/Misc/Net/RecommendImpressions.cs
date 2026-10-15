@@ -3,6 +3,7 @@ using MajdataPlay.Collections;
 using MajdataPlay.Diagnostics;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 #nullable enable
 namespace MajdataPlay.Net
@@ -49,12 +50,30 @@ namespace MajdataPlay.Net
             _focused = null;
         }
         /// <summary>
-        /// The player starts the song. It counts without dwell and is sent at once.
+        /// The player starts the song. It counts without dwell and is sent at once, or once
+        /// <paramref name="sendAfter"/> completes.
         /// </summary>
-        public static void Commit(SongCollection collection, ISongDetail? song)
+        /// <param name="sendAfter">
+        /// The refresh of stale feeds started for this game. The server only marks charts served in the last
+        /// 30 minutes, so an impression racing the refetch of an expired feed would be dropped.
+        /// </param>
+        public static void Commit(SongCollection collection, ISongDetail? song, Task? sendAfter = null)
         {
             Blur();
-            GetEntry(collection, song)?.Tracker.Commit(song!.Hash);
+            var entry = GetEntry(collection, song);
+            if (entry is null)
+            {
+                return;
+            }
+            entry.SendAfter = sendAfter;
+            try
+            {
+                entry.Tracker.Commit(song!.Hash);
+            }
+            finally
+            {
+                entry.SendAfter = null;
+            }
         }
         /// <summary>
         /// The app went to the background and may not come back
@@ -96,10 +115,22 @@ namespace MajdataPlay.Net
             }
             return entry;
         }
-        static async UniTaskVoid SendAsync(ApiEndpoint endpoint, string[] chartHashes)
+        static async UniTaskVoid SendAsync(ApiEndpoint endpoint, string[] chartHashes, Task? sendAfter)
         {
             try
             {
+                if (sendAfter is not null)
+                {
+                    try
+                    {
+                        await sendAfter;
+                    }
+                    catch (Exception e)
+                    {
+                        // A failed refresh leaves the old served records; send anyway
+                        MajDebug.LogException(e);
+                    }
+                }
                 await Online.PostRecommendImpressionsAsync(endpoint, chartHashes);
             }
             catch (Exception e)
@@ -111,6 +142,10 @@ namespace MajdataPlay.Net
         {
             public ImpressionTracker Tracker { get; }
             public int Generation { get; set; }
+            /// <summary>
+            /// Set by <see cref="Commit"/> for the batch it sends
+            /// </summary>
+            public Task? SendAfter { get; set; }
 
             readonly ApiEndpoint _endpoint;
 
@@ -127,7 +162,7 @@ namespace MajdataPlay.Net
                 {
                     return;
                 }
-                SendAsync(_endpoint, chartHashes).Forget();
+                SendAsync(_endpoint, chartHashes, SendAfter).Forget();
             }
             async UniTaskVoid FlushLaterAsync()
             {
