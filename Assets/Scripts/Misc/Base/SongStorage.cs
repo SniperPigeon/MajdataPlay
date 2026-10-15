@@ -476,8 +476,8 @@ namespace MajdataPlay
         #region Recommendations
         /// <summary>
         /// Rebuilds the personal recommendation folders: one for each logged-in endpoint, placed after that
-        /// endpoint's chart list. Folders of endpoints that are no longer logged in are removed.
-        /// Recommendations are optional, so failures are only logged.
+        /// endpoint's chart list. Folders of endpoints that are no longer logged in, or that have nothing to
+        /// recommend, are removed. Recommendations are optional, so failures are only logged.
         /// </summary>
         /// <param name="progressReporter">Receives recommendation fetch status messages.</param>
         /// <returns>A task which completes after the folders are published and obsolete charts are released.</returns>
@@ -506,6 +506,7 @@ namespace MajdataPlay
                         MajDebug.LogInfo($"[Online]Fetching recommendations from {api.Url.OriginalString}");
                         progressReporter?.Report(ZString.Format("MAJTEXT_SCANNING_RECOMMENDATIONS_FROM_{0}".i18n(), api.Name));
                         var charts = await FetchRecommendFeedAsync(api).ConfigureAwait(false);
+                        // An empty feed is the server saying there is nothing to recommend: no folder
                         if (charts is not null && charts.Length != 0)
                         {
                             recommendCollections.Add(CreateRecommendCollection(api, charts, s_allCharts));
@@ -535,6 +536,8 @@ namespace MajdataPlay
         /// Fetches again the recommendation feeds older than <see cref="s_recommendRefreshInterval"/>, before the
         /// server stops accepting their impressions. Existing folders are replaced in place, so folder indices stay
         /// valid while another scene is running; the List scene shows the new folders the next time it loads.
+        /// An empty feed therefore empties its folder rather than removing it, and the next
+        /// <see cref="RefreshRecommendAsync"/> drops it. A failed fetch keeps the old folder.
         /// </summary>
         /// <returns>A task which completes after the refreshed folders are published, or at once while another refresh runs.</returns>
         internal static async Task RefreshStaleRecommendAsync()
@@ -563,8 +566,9 @@ namespace MajdataPlay
                     {
                         MajDebug.LogInfo($"[Online]Refreshing recommendations from {api.Url.OriginalString}");
                         var charts = await FetchRecommendFeedAsync(api).ConfigureAwait(false);
-                        if (charts is null || charts.Length == 0)
+                        if (charts is null)
                         {
+                            // Failed: keep showing the old folder; its fetch time is unchanged, so the next game retries
                             continue;
                         }
                         collections[i] = CreateRecommendCollection(api, charts, s_allCharts);
@@ -603,7 +607,11 @@ namespace MajdataPlay
 
         /// <summary>Fetches an endpoint's recommendation feed and records it as the endpoint's current feed.</summary>
         /// <param name="api">The endpoint whose feed is requested.</param>
-        /// <returns>The recommended charts in server order, or null if the feed could not be fetched.</returns>
+        /// <returns>
+        /// The recommended charts in server order, or null if the feed could not be fetched. The server answers
+        /// 200 [] when it has nothing to recommend; nothing in the old folder is served then (so impressions for
+        /// it stop counting), so callers must not keep the old folder.
+        /// </returns>
         private static async Task<MajnetSongDetail[]?> FetchRecommendFeedAsync(ApiEndpoint api)
         {
             var charts = new List<MajnetSongDetail>(RecommendPageSize);
