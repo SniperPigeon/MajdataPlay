@@ -297,6 +297,8 @@
     "MAJTEXT_ONLINE_USERNAME_OR_PASSWORD_INCORRECT": "ユーザー名またはパスワードが間違っています。",
     "MAJTEXT_ONLINE_USERNAME_OR_PASSWORD_UNSET": "ユーザー名またはパスワードが設定されていません",
     "MAJTEXT_ONLINE_ACCESS_FORBIDDEN": "403 Forbidden メール認証を完了してから再試行してみてください。",
+    "MAJTEXT_ONLINE_ACCOUNT_PENDING_VERIFICATION": "旧アカウントが有効化されていません。管理者にお問い合わせください。",
+    "MAJTEXT_ONLINE_ACCOUNT_BANNED": "このユーザーはBANされています。",
     "MAJTEXT_SCORE_FAILED": "スコアの送信に失敗しました",
     "MAJTEXT_SCORE_SENDED": "スコアの送信を完了しました",
     "MAJTEXT_SCORE_SENDING": "...",

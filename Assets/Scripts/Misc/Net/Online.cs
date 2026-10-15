@@ -21,6 +21,7 @@ using System.Threading.Tasks;
 using MajdataPlay.Utils;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.Scripting;
 using Nito.AsyncEx;
 using MajdataPlay.Numerics;
 using MajdataPlay.Diagnostics;
@@ -57,6 +58,11 @@ namespace MajdataPlay.Net
         public const string API_POST_MACHINE_REGISTER = "machine/register";
         public const string API_POST_AUTH_REQUEST = "machine/auth/request";
         public const string API_POST_AUTH_REVOKE = "machine/auth/revoke";
+
+        // The "code" of the server's { code, message } body, for login failures with status 403
+        const int CODE_ALREADY_LOGGED_IN = 0;
+        const int CODE_LOGIN_FAILED_PENDING_VERIFICATION = 11;
+        const int CODE_LOGIN_FAILED_USER_BANNED = 12;
 
         static SpinLock _dictLock = new();
         static SpinLock _cachedResponseLock = new();
@@ -369,6 +375,45 @@ namespace MajdataPlay.Net
                     IsDeserializable = rsp.IsDeserializable,
                     Headers = rsp.Headers,
                     Message = "MAJTEXT_ONLINE_USERNAME_OR_PASSWORD_INCORRECT"
+                };
+            }
+            else if (rsp.StatusCode is HttpStatusCode.Forbidden)
+            {
+                var code = Serializer.Json.TryDeserialize<NetStatus>(Encoding.UTF8.GetString(rsp.AsSpan()), out var status, out _, _defaultJsonSerializerSettings)
+                    ? status.Code
+                    : null;
+                if (code == CODE_ALREADY_LOGGED_IN)
+                {
+                    // The session cookie is still valid on the server
+                    using (await statistic.LockAsync())
+                    {
+                        statistic.IsUserLoggedIn = true;
+                    }
+                    return new()
+                    {
+                        Endpoint = uri,
+                        IsSuccessfully = true,
+                        IsDeserializable = false,
+                        StatusCode = HttpStatusCode.OK,
+                        ErrorCode = HttpErrorCode.NoError,
+                        Headers = rsp.Headers,
+                        Message = string.Empty
+                    };
+                }
+                rsp = new(rsp.AsMemory(), _defaultJsonSerializer, _defaultJsonSerializerSettings)
+                {
+                    Endpoint = rsp.Endpoint,
+                    StatusCode = rsp.StatusCode,
+                    ErrorCode = rsp.ErrorCode,
+                    IsSuccessfully = rsp.IsSuccessfully,
+                    IsDeserializable = rsp.IsDeserializable,
+                    Headers = rsp.Headers,
+                    Message = code switch
+                    {
+                        CODE_LOGIN_FAILED_PENDING_VERIFICATION => "MAJTEXT_ONLINE_ACCOUNT_PENDING_VERIFICATION",
+                        CODE_LOGIN_FAILED_USER_BANNED => "MAJTEXT_ONLINE_ACCOUNT_BANNED",
+                        _ => "MAJTEXT_ONLINE_ACCESS_FORBIDDEN"
+                    }
                 };
             }
             else if (rsp.StatusCode is HttpStatusCode.OK)
@@ -1093,6 +1138,15 @@ namespace MajdataPlay.Net
             {
                 return _lock.LockAsync(token);
             }
+        }
+        [Preserve]
+        readonly struct NetStatus
+        {
+            // Nullable: a 403 from a proxy or the framework has no code, which must not read as 0 (already logged in)
+            [Preserve]
+            public int? Code { get; init; }
+            [Preserve]
+            public string? Message { get; init; }
         }
         readonly struct NetMachineInfo
         {

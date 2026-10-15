@@ -359,7 +359,8 @@ namespace MajdataPlay.Scenes.Login
                                     {
                                         HttpStatusCode.Unauthorized => "MAJTEXT_ONLINE_USERNAME_OR_PASSWORD_INCORRECT",
                                         HttpStatusCode.MethodNotAllowed => "MAJTEXT_ONLINE_METHOD_NOT_ALLOWED",
-                                        HttpStatusCode.Forbidden => "MAJTEXT_ONLINE_ACCESS_FORBIDDEN",
+                                        // LoginAsync tells pending verification and banned accounts apart
+                                        HttpStatusCode.Forbidden => string.IsNullOrEmpty(rsp.Message) ? "MAJTEXT_ONLINE_ACCESS_FORBIDDEN" : rsp.Message,
                                         _ => "MAJTEXT_LOGIN_UNKNOWN_ERROR"
                                     },
                                     _ => "MAJTEXT_LOGIN_UNKNOWN_ERROR"
