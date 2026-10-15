@@ -62,10 +62,11 @@ namespace MajdataPlay.Net.Tests
         [Test]
         public void RefocusingTheSameChartKeepsItsStartTime()
         {
+            // Each part is below the dwell, so the chart only counts if the refocus kept the start time
             _tracker.Focus("a");
-            _now += 0.3;
+            _now += ImpressionTracker.DWELL_SECONDS * 0.6;
             _tracker.Focus("a");
-            _now += 0.3;
+            _now += ImpressionTracker.DWELL_SECONDS * 0.6;
             _tracker.Blur();
 
             Assert.That(_tracker.PendingCount, Is.EqualTo(1));
