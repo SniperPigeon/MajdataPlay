@@ -40,8 +40,8 @@ namespace MajdataPlay.Net
             ObjectCreationHandling = ObjectCreationHandling.Replace
         };
 
-        public const string API_GET_USER_INFO = "account/info";
-        public const string API_GET_USER_ICON = "account/icon?username={0}";
+        public const string API_GET_USER_PROFILE = "account/profile";
+        public const string API_GET_AVATAR = "avatar/{0}";
         public const string API_GET_USER_SCORES = "account/scores";
         public const string API_GET_USER_FAVCOLLECTION = "account/favorite/collection/list";
         public const string API_GET_MAICHART_LIST = "maichart/list";
@@ -93,7 +93,7 @@ namespace MajdataPlay.Net
                     {
                         using (await statistics.LockAsync(token))
                         {
-                            var rsp = await GetUserInfoAsyncInternal(statistics.Endpoint, token);
+                            var rsp = await GetUserProfileAsyncInternal(statistics.Endpoint, token);
                             var isAlive = rsp.StatusCode is not HttpStatusCode.Unauthorized;
                             statistics.IsUserLoggedIn = isAlive;
                         }
@@ -107,11 +107,11 @@ namespace MajdataPlay.Net
             }
             MajDebug.LogDebug("Online heartbeat has been completed");
         }
-        public static async ValueTask<EndpointResponse<UserSummary>> GetUserInfoAsync(ApiEndpoint apiEndpoint, CancellationToken token = default)
+        public static async ValueTask<EndpointResponse<UserProfile>> GetUserProfileAsync(ApiEndpoint apiEndpoint, CancellationToken token = default)
         {
             await UniTask.SwitchToThreadPool();
             var statistic = GetApiEndpointStatistic(apiEndpoint);
-            var rsp = await GetUserInfoAsyncInternal(apiEndpoint, token);
+            var rsp = await GetUserProfileAsyncInternal(apiEndpoint, token);
             if (rsp.StatusCode is HttpStatusCode.Unauthorized)
             {
                 using (await statistic.LockAsync())
@@ -406,6 +406,7 @@ namespace MajdataPlay.Net
                         apiEndpoint.RuntimeConfig.AuthMethod = NetAuthMethodOption.None;
                         apiEndpoint.RuntimeConfig.Avatar = null;
                         apiEndpoint.RuntimeConfig.Username = "???";
+                        apiEndpoint.RuntimeConfig.Nickname = "???";
                         apiEndpoint.RuntimeConfig.AuthUsername = apiEndpoint.Username;
                         apiEndpoint.RuntimeConfig.AuthPassword = apiEndpoint.Password;
                     }
@@ -699,15 +700,15 @@ namespace MajdataPlay.Net
             return null;
         }
 
-        public static async ValueTask<Sprite?> GetUserIconAsync(ApiEndpoint apiEndpoint,string username, CancellationToken token = default, Action<string, bool>? onError = null)
+        /// <param name="avatarId">AvatarId of the user's profile; null or empty if the user has no avatar</param>
+        public static async ValueTask<Sprite?> GetAvatarAsync(ApiEndpoint apiEndpoint, string? avatarId, CancellationToken token = default, Action<string, bool>? onError = null)
         {
-            if(string.IsNullOrEmpty(username))
+            if(string.IsNullOrEmpty(avatarId))
             {
                 return null;
             }
             await UniTask.SwitchToThreadPool();
-            var url = apiEndpoint.Url.Combine(string.Format(API_GET_USER_ICON, username));
-            var statistic = GetApiEndpointStatistic(apiEndpoint);
+            var url = apiEndpoint.Url.Combine(string.Format(API_GET_AVATAR, Uri.EscapeDataString(avatarId)));
             for (var i = 0; i <= MajEnv.HTTP_REQUEST_MAX_RETRY; i++)
             {
                 try
@@ -715,13 +716,9 @@ namespace MajdataPlay.Net
                     var rsp = await GetAsync(url, token);
                     if (!rsp.IsSuccessfully)
                     {
-                        MajDebug.LogError("Failed to download user icon");
-                        if (rsp.StatusCode is HttpStatusCode.Unauthorized)
+                        MajDebug.LogError("Failed to download user avatar");
+                        if (rsp.StatusCode is HttpStatusCode.NotFound || rsp.ErrorCode is HttpErrorCode.Canceled)
                         {
-                            using (await statistic.LockAsync(token))
-                            {
-                                statistic.IsUserLoggedIn = false;
-                            }
                             return default;
                         }
                         await UniTask.SwitchToMainThread();
@@ -729,16 +726,12 @@ namespace MajdataPlay.Net
                         await UniTask.SwitchToThreadPool();
                         continue;
                     }
-                    using (await statistic.LockAsync(token))
-                    {
-                        statistic.IsUserLoggedIn = true;
-                    }
                     var avatar = await SpriteLoader.LoadFromMemoryAsync(rsp.AsMemory());
                     return avatar;
                 }
                 catch (Exception e)
                 {
-                    MajDebug.LogError("Failed to download user icon");
+                    MajDebug.LogError("Failed to download user avatar");
                     MajDebug.LogError(e);
                 }
             }
@@ -768,25 +761,25 @@ namespace MajdataPlay.Net
             }
         }
         #region Internal method
-        static async ValueTask<EndpointResponse<UserSummary>> GetUserInfoAsyncInternal(ApiEndpoint apiEndpoint, CancellationToken token = default)
+        static async ValueTask<EndpointResponse<UserProfile>> GetUserProfileAsyncInternal(ApiEndpoint apiEndpoint, CancellationToken token = default)
         {
-            var uri = apiEndpoint.Url.Combine(API_GET_USER_INFO);
+            var uri = apiEndpoint.Url.Combine(API_GET_USER_PROFILE);
             var rsp = default(EndpointResponse);
             for (var i = 0; i <= MajEnv.HTTP_REQUEST_MAX_RETRY; i++)
             {
                 rsp = await GetAsync(uri, token);
                 if (rsp.StatusCode is HttpStatusCode.Unauthorized)
                 {
-                    return new EndpointResponse<UserSummary>(rsp);
+                    return new EndpointResponse<UserProfile>(rsp);
                 }
                 else if (!rsp.IsSuccessfully || !rsp.IsDeserializable)
                 {
-                    MajDebug.LogError("Failed to get user info");
+                    MajDebug.LogError("Failed to get user profile");
                     continue;
                 }
-                return new EndpointResponse<UserSummary>(rsp);
+                return new EndpointResponse<UserProfile>(rsp);
             }
-            return new EndpointResponse<UserSummary>(rsp);
+            return new EndpointResponse<UserProfile>(rsp);
         }
         static async ValueTask<EndpointResponse> GetAsync(Uri uri, CancellationToken token = default)
         {
@@ -1080,6 +1073,7 @@ namespace MajdataPlay.Net
                     {
                         Endpoint.RuntimeConfig.Avatar = null;
                         Endpoint.RuntimeConfig.Username = string.Empty;
+                        Endpoint.RuntimeConfig.Nickname = string.Empty;
                     }
                     Endpoint.RuntimeConfig.IsLoggedIn = value ?? false;
                     _isUserLoggedIn = value;
