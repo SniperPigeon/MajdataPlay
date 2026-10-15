@@ -130,7 +130,9 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             {
                 _buttonPos = null;
             }
-            JudgableRange = new(JudgeTimingWithOffset - 0.15f, JudgeTimingWithOffset + 0.316667f, ContainsType.Closed);
+            JudgableRange = new(JudgeTimingWithOffset - (TOUCH_JUDGE_SEG_1ST_PERFECT_MSEC / 1000f),
+                JudgeTimingWithOffset + (TOUCH_JUDGE_GOOD_AREA_MSEC / 1000f),
+                ContainsType.Closed);
 
             _wholeDuration = 3.209385682f * Mathf.Pow(Speed, -0.9549621752f);
             _moveDuration = 0.8f * _wholeDuration;
