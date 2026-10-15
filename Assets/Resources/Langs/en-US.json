@@ -284,6 +284,8 @@
     "MAJTEXT_SCANNING_CHARTS": "Scanning charts",
     "MAJTEXT_SCANNING_CHARTS_FROM_{0}": "Scanning charts from {0}",
     "MAJTEXT_SCANNING_FAVORITES_FROM_{0}": "Fetching favorites from {0}",
+    "MAJTEXT_SCANNING_RECOMMENDATIONS_FROM_{0}": "Fetching recommendations from {0}",
+    "MAJTEXT_COLLECTION_RECOMMEND_{0}": "For You ({0})",
     "MAJTEXT_ERR_SCAN_CHARTS_FAILED": "Chart scanning failed",
     "MAJTEXT_ERR_SCAN_ONLINE_FAV_COLLECTION_FAILED": "Failed to fetch online favorites",
     "MAJTEXT_SCORE_FAILED": "Failed to send score",

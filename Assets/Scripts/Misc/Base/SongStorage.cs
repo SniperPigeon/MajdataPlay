@@ -8,11 +8,13 @@ using MajdataPlay.Numerics;
 using MajdataPlay.Utils;
 using SQLite;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 #nullable enable
@@ -98,7 +100,7 @@ namespace MajdataPlay
         /// <summary>Stores the chart instances owned by the last successfully published library.</summary>
         private static ISongDetail[] s_allCharts = Array.Empty<ISongDetail>();
 
-        /// <summary>Serializes initialization, collection refreshes and online favorite refreshes.</summary>
+        /// <summary>Serializes initialization, collection refreshes, online favorite refreshes and recommendation refreshes.</summary>
         private static readonly SemaphoreSlim s_refreshLock = new(1, 1);
         /// <summary>Stores local playlist definitions independently of the charts currently available to resolve them.</summary>
         private static LocalPlaylistDefinition[] s_localPlaylistDefinitions = Array.Empty<LocalPlaylistDefinition>();
@@ -117,6 +119,19 @@ namespace MajdataPlay
         private const string MyFavoriteFileName = "MyFavorites.json";
         /// <summary>The SQLite favorites database file name inside <see cref="MajEnv.RuntimeCacheDirectory"/>.</summary>
         private const string FavoriteDatabaseFileName = "MajFavorites.db";
+
+        /// <summary>The page size of the recommendation feed; the server snapshot holds at most 150 charts, so two pages fetch all of it.</summary>
+        private const int RecommendPageSize = 100;
+        /// <summary>The number of recommendation feed pages fetched at most.</summary>
+        private const int RecommendMaxPageCount = 2;
+        /// <summary>The age after which a feed is fetched again, well within the server's 30-minute impression window.</summary>
+        private static readonly TimeSpan s_recommendRefreshInterval = TimeSpan.FromMinutes(10);
+        /// <summary>Stores the last successfully fetched feed of each endpoint, which rebuilds its folder whenever the library is republished.</summary>
+        private static readonly ConcurrentDictionary<ApiEndpoint, RecommendFeedState> s_recommendStates = new();
+        /// <summary>Stores the chart instances owned by recommendation folders because their endpoint's chart list lacks them.</summary>
+        private static ISongDetail[] s_recommendCharts = Array.Empty<ISongDetail>();
+        /// <summary>Stores the last feed generation handed out; every fetched feed takes the next one.</summary>
+        private static int s_recommendGeneration = 0;
         /// <summary>Initializes favorites storage and save handling without loading or refreshing collections.</summary>
         /// <param name="cancellationToken">Cancels waiting or initialization before save handling is registered.</param>
         /// <returns>A task which completes when storage is ready for explicit collection refreshes.</returns>
@@ -211,15 +226,18 @@ namespace MajdataPlay
                         ? null
                         : previousCollection[selectedIndex.Clamp(0, previousCollection.Count - 1)].Hash;
                 var oldCharts = s_allCharts;
+                var oldRecommendCharts = s_recommendCharts;
                 snapshot = await Task.Run(() => refreshOnline
                     ? CreateOnlineSnapshotAsync(progressReporter, cancellationToken)
                     : CreateLocalSnapshotAsync(progressReporter, cancellationToken), cancellationToken).ConfigureAwait(false);
                 progressReporter?.Report("MAJTEXT_CLEANING_UP".i18n());
                 cancellationToken.ThrowIfCancellationRequested();
+                snapshot = AddRecommendCollections(snapshot);
                 PublishSnapshot(snapshot);
                 isPublished = true;
                 RestoreSelection(selectedId, selectedHash, selectedDir, selectedIndex);
                 await DisposeReplacedChartsAsync(oldCharts, snapshot.AllCharts).ConfigureAwait(false);
+                await DisposeReplacedChartsAsync(oldRecommendCharts, s_recommendCharts).ConfigureAwait(false);
                 MajDebug.LogInfo($"Loaded chart count: {TotalChartCount}");
                 if (refreshOnline)
                 {
@@ -313,6 +331,7 @@ namespace MajdataPlay
             s_localPlaylistDefinitions = snapshot.LocalPlaylists;
             Interlocked.Exchange(ref s_totalChartCount, snapshot.AllCharts.LongLength);
             Collections = snapshot.Collections;
+            s_recommendCharts = GetRecommendOnlyCharts(snapshot.Collections, snapshot.AllCharts);
             s_collectionIndex = Collections.Length == 0 ? 0 : s_collectionIndex.Clamp(0, Collections.Length - 1);
         }
 
@@ -453,6 +472,344 @@ namespace MajdataPlay
                 s_refreshLock.Release();
             }
         }
+
+        #region Recommendations
+        /// <summary>
+        /// Rebuilds the personal recommendation folders: one for each logged-in endpoint, placed after that
+        /// endpoint's chart list. Folders of endpoints that are no longer logged in are removed.
+        /// Recommendations are optional, so failures are only logged.
+        /// </summary>
+        /// <param name="progressReporter">Receives recommendation fetch status messages.</param>
+        /// <returns>A task which completes after the folders are published and obsolete charts are released.</returns>
+        internal static async Task RefreshRecommendAsync(IProgress<string>? progressReporter = null)
+        {
+            if (!MajEnv.Settings.Online.Enable)
+            {
+                return;
+            }
+            await s_refreshLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (!s_isInitialized)
+                {
+                    return;
+                }
+                var recommendCollections = new List<OnlineSongCollection>();
+                foreach (var api in MajEnv.ApiEndpoints.OrderBy(endpoint => endpoint.Name))
+                {
+                    if (api is null || string.IsNullOrEmpty(api.Name) || !api.RuntimeConfig.IsLoggedIn)
+                    {
+                        continue;
+                    }
+                    try
+                    {
+                        MajDebug.LogInfo($"[Online]Fetching recommendations from {api.Url.OriginalString}");
+                        progressReporter?.Report(ZString.Format("MAJTEXT_SCANNING_RECOMMENDATIONS_FROM_{0}".i18n(), api.Name));
+                        var charts = await FetchRecommendFeedAsync(api).ConfigureAwait(false);
+                        if (charts is not null && charts.Length != 0)
+                        {
+                            recommendCollections.Add(CreateRecommendCollection(api, charts, s_allCharts));
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        MajDebug.LogError($"[Online]Fetching recommendations from {api.Url.OriginalString} failed because of {e.Message}");
+                        MajDebug.LogException(e);
+                    }
+                }
+                var collections = Collections.Where(collection => collection.Type != ChartStorageType.Recommend).ToList();
+                InsertRecommendCollections(collections, recommendCollections);
+                await PublishRecommendCollectionsAsync(collections.ToArray()).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                MajDebug.LogException(e);
+            }
+            finally
+            {
+                s_refreshLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Fetches again the recommendation feeds older than <see cref="s_recommendRefreshInterval"/>, before the
+        /// server stops accepting their impressions. Existing folders are replaced in place, so folder indices stay
+        /// valid while another scene is running; the List scene shows the new folders the next time it loads.
+        /// </summary>
+        /// <returns>A task which completes after the refreshed folders are published, or at once while another refresh runs.</returns>
+        internal static async Task RefreshStaleRecommendAsync()
+        {
+            if (!await s_refreshLock.WaitAsync(0).ConfigureAwait(false))
+            {
+                return;
+            }
+            try
+            {
+                var now = DateTime.UtcNow;
+                var collections = Collections.ToArray();
+                var isChanged = false;
+                for (var i = 0; i < collections.Length; i++)
+                {
+                    if (collections[i] is not OnlineSongCollection { Type: ChartStorageType.Recommend } folder)
+                    {
+                        continue;
+                    }
+                    var api = folder.Source;
+                    if (s_recommendStates.TryGetValue(api, out var state) && now - state.FetchedAt < s_recommendRefreshInterval)
+                    {
+                        continue;
+                    }
+                    try
+                    {
+                        MajDebug.LogInfo($"[Online]Refreshing recommendations from {api.Url.OriginalString}");
+                        var charts = await FetchRecommendFeedAsync(api).ConfigureAwait(false);
+                        if (charts is null || charts.Length == 0)
+                        {
+                            continue;
+                        }
+                        collections[i] = CreateRecommendCollection(api, charts, s_allCharts);
+                        isChanged = true;
+                    }
+                    catch (Exception e)
+                    {
+                        MajDebug.LogError($"[Online]Refreshing recommendations from {api.Url.OriginalString} failed because of {e.Message}");
+                        MajDebug.LogException(e);
+                    }
+                }
+                if (isChanged)
+                {
+                    ReplaceRecommendCollections(collections);
+                }
+            }
+            catch (Exception e)
+            {
+                MajDebug.LogException(e);
+            }
+            finally
+            {
+                s_refreshLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Changes every time the endpoint's feed is fetched; a new batch lets charts be reported as seen again.
+        /// </summary>
+        /// <param name="api">The endpoint whose feed generation is requested.</param>
+        /// <returns>The generation of the endpoint's last fetched feed, or 0 before the first fetch.</returns>
+        internal static int GetRecommendGeneration(ApiEndpoint api)
+        {
+            return s_recommendStates.TryGetValue(api, out var state) ? state.Generation : 0;
+        }
+
+        /// <summary>Fetches an endpoint's recommendation feed and records it as the endpoint's current feed.</summary>
+        /// <param name="api">The endpoint whose feed is requested.</param>
+        /// <returns>The recommended charts in server order, or null if the feed could not be fetched.</returns>
+        private static async Task<MajnetSongDetail[]?> FetchRecommendFeedAsync(ApiEndpoint api)
+        {
+            var charts = new List<MajnetSongDetail>(RecommendPageSize);
+            for (var page = 0; page < RecommendMaxPageCount; page++)
+            {
+                var feed = await Online.GetRecommendFeedAsync(api, page, RecommendPageSize).ConfigureAwait(false);
+                if (feed is null)
+                {
+                    if (page == 0)
+                    {
+                        return null;
+                    }
+                    break;
+                }
+                charts.AddRange(feed);
+                if (feed.Length < RecommendPageSize)
+                {
+                    break;
+                }
+            }
+            var result = charts.ToArray();
+            s_recommendStates[api] = new RecommendFeedState
+            {
+                FetchedAt = DateTime.UtcNow,
+                Generation = Interlocked.Increment(ref s_recommendGeneration),
+                Charts = result
+            };
+            return result;
+        }
+
+        /// <summary>Builds an endpoint's recommendation folder from a fetched feed without network requests.</summary>
+        /// <param name="api">The endpoint which served the feed.</param>
+        /// <param name="charts">The recommended charts in server order.</param>
+        /// <param name="baseCharts">The base chart instances of the library the folder is published with.</param>
+        /// <returns>The folder, keeping the server order and dropping repeated charts.</returns>
+        /// <remarks>
+        /// The endpoint's songs from the chart list are reused, so loaded covers and tracks are shared and scores are
+        /// uploaded to the same endpoint. Charts uploaded after the list was fetched get songs of their own, owned by
+        /// the recommendation folders and reused until the chart list contains them.
+        /// </remarks>
+        /// <exception cref="IOException">The endpoint's cache directory could not be accessed.</exception>
+        private static OnlineSongCollection CreateRecommendCollection(ApiEndpoint api, MajnetSongDetail[] charts, ISongDetail[] baseCharts)
+        {
+            var knownSongs = new Dictionary<string, OnlineSongDetail>(StringComparer.Ordinal);
+            foreach (var song in baseCharts.Concat(s_recommendCharts))
+            {
+                if (song is OnlineSongDetail online && ReferenceEquals(online.ServerInfo, api))
+                {
+                    knownSongs.TryAdd(online.Hash, online);
+                }
+            }
+            var created = new List<ISongDetail>();
+            try
+            {
+                var cacheDirectory = default(StorageDirectory);
+                var songs = new List<ISongDetail>(charts.Length);
+                var addedHashes = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var chart in charts)
+                {
+                    if (!addedHashes.Add(chart.Hash))
+                    {
+                        continue;
+                    }
+                    if (!knownSongs.TryGetValue(chart.Hash, out var song))
+                    {
+                        cacheDirectory ??= MajEnv.CacheDirectory.CreateDirectory("Net").CreateDirectory(api.Name);
+                        var cacheName = BitConverter.ToString(Convert.FromBase64String(chart.Hash));
+                        song = new OnlineSongDetail(cacheDirectory.CreateDirectory(cacheName), api, chart);
+                        created.Add(song);
+                    }
+                    songs.Add(song);
+                }
+                var name = ZString.Format("MAJTEXT_COLLECTION_RECOMMEND_{0}".i18n(), api.Name);
+                return new OnlineSongCollection(api, name, songs.ToArray())
+                {
+                    Id = GetRecommendCollectionId(api),
+                    Type = ChartStorageType.Recommend
+                };
+            }
+            catch
+            {
+                DisposeUnpublishedCharts(created);
+                throw;
+            }
+        }
+
+        /// <summary>Carries the published recommendation folders into a replacement library, rebound to its chart instances.</summary>
+        /// <param name="snapshot">The complete, unpublished replacement library.</param>
+        /// <returns>The replacement library including the rebuilt folders, which are dropped while online functions are disabled.</returns>
+        private static StorageSnapshot AddRecommendCollections(StorageSnapshot snapshot)
+        {
+            if (!MajEnv.Settings.Online.Enable)
+            {
+                return snapshot;
+            }
+            var recommendCollections = new List<OnlineSongCollection>();
+            foreach (var collection in Collections)
+            {
+                if (collection is not OnlineSongCollection { Type: ChartStorageType.Recommend } folder ||
+                    !s_recommendStates.TryGetValue(folder.Source, out var state))
+                {
+                    continue;
+                }
+                try
+                {
+                    recommendCollections.Add(CreateRecommendCollection(folder.Source, state.Charts, snapshot.AllCharts));
+                }
+                catch (Exception e)
+                {
+                    MajDebug.LogException(e);
+                }
+            }
+            if (recommendCollections.Count == 0)
+            {
+                return snapshot;
+            }
+            var collections = new List<SongCollection>(snapshot.Collections);
+            InsertRecommendCollections(collections, recommendCollections);
+            return new StorageSnapshot(collections.ToArray(), snapshot.AllCharts, snapshot.Favorites, snapshot.LocalPlaylists);
+        }
+
+        /// <summary>Places each recommendation folder right after its endpoint's chart list, or last when the list is missing.</summary>
+        /// <param name="collections">The collections in display order, without recommendation folders.</param>
+        /// <param name="recommendCollections">The recommendation folders in endpoint-name order.</param>
+        private static void InsertRecommendCollections(List<SongCollection> collections, IEnumerable<OnlineSongCollection> recommendCollections)
+        {
+            foreach (var recommend in recommendCollections)
+            {
+                var listIndex = collections.FindIndex(collection => collection is OnlineSongCollection online &&
+                                                                    online.Type == ChartStorageType.List &&
+                                                                    ReferenceEquals(online.Source, recommend.Source));
+                if (listIndex == -1)
+                {
+                    collections.Add(recommend);
+                }
+                else
+                {
+                    collections.Insert(listIndex + 1, recommend);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Publishes collections whose recommendation folders were added, removed or replaced, restores the selection
+        /// by collection identity, then releases the charts only the old folders owned.
+        /// </summary>
+        /// <param name="collections">The complete collections in display order.</param>
+        /// <returns>A task which completes when the obsolete charts are released.</returns>
+        private static async Task PublishRecommendCollectionsAsync(SongCollection[] collections)
+        {
+            var oldRecommendCharts = s_recommendCharts;
+            var listConfig = MajEnv.RuntimeConfig.List;
+            var selectedIndex = listConfig.SelectedSongIndex;
+            var selectedDir = listConfig.SelectedDir;
+            var previousCollection = Collections.Length == 0
+                ? s_emptyCollection
+                : Collections[selectedDir.Clamp(0, Collections.Length - 1)];
+            var selectedId = Collections.Length == 0 ? listConfig.SelectedDirGuid : previousCollection.Id;
+            var selectedHash = Collections.Length == 0
+                ? listConfig.SelectedSongHash
+                : previousCollection.Count == 0
+                    ? null
+                    : previousCollection[selectedIndex.Clamp(0, previousCollection.Count - 1)].Hash;
+            Collections = collections;
+            s_recommendCharts = GetRecommendOnlyCharts(collections, s_allCharts);
+            RestoreSelection(selectedId, selectedHash, selectedDir, selectedIndex);
+            await DisposeReplacedChartsAsync(oldRecommendCharts, s_recommendCharts).ConfigureAwait(false);
+        }
+
+        /// <summary>Publishes collections whose recommendation folders were replaced in place, so every index stays valid.</summary>
+        /// <param name="collections">The complete collections in display order.</param>
+        /// <remarks>
+        /// The charts only the old folders owned are kept until the next full refresh releases them, since a game
+        /// started from a folder may still be playing one of them.
+        /// </remarks>
+        private static void ReplaceRecommendCollections(SongCollection[] collections)
+        {
+            Collections = collections;
+            s_recommendCharts = s_recommendCharts.Concat(GetRecommendOnlyCharts(collections, s_allCharts))
+                                                 .Distinct(SongReferenceComparer.Instance)
+                                                 .ToArray();
+        }
+
+        /// <summary>Finds the chart instances which recommendation folders reference but the base library does not own.</summary>
+        /// <param name="collections">The collections to publish.</param>
+        /// <param name="allCharts">The base chart instances published with them.</param>
+        /// <returns>The distinct chart instances owned by the recommendation folders.</returns>
+        private static ISongDetail[] GetRecommendOnlyCharts(SongCollection[] collections, ISongDetail[] allCharts)
+        {
+            var baseCharts = new HashSet<ISongDetail>(allCharts, SongReferenceComparer.Instance);
+            return collections.Where(collection => collection.Type == ChartStorageType.Recommend)
+                              .SelectMany(collection => collection.GetOriginSnapshot())
+                              .Where(chart => !baseCharts.Contains(chart))
+                              .Distinct(SongReferenceComparer.Instance)
+                              .ToArray();
+        }
+
+        /// <summary>Derives an endpoint's folder identity, stable across fetches so the List scene can return to the folder it had selected.</summary>
+        /// <param name="api">The endpoint owning the folder.</param>
+        /// <returns>The folder identity.</returns>
+        private static Guid GetRecommendCollectionId(ApiEndpoint api)
+        {
+            using var md5 = MD5.Create();
+            return new Guid(md5.ComputeHash(Encoding.UTF8.GetBytes($"recommend:{api.Url.OriginalString}")));
+        }
+        #endregion
 
         /// <summary>Loads enabled online base collections independently of the local chart root.</summary>
         /// <param name="progressReporter">Receives online loading status messages.</param>
@@ -1221,6 +1578,19 @@ namespace MajdataPlay
             /// <summary>Gets or sets the Base64 chart identity used as the database primary key.</summary>
             [PrimaryKey]
             public string Hash { get; set; } = string.Empty;
+        }
+
+        /// <summary>Records an endpoint's last successfully fetched recommendation feed.</summary>
+        private readonly struct RecommendFeedState
+        {
+            /// <summary>Gets when the feed was served; the server accepts impressions for 30 minutes after that.</summary>
+            public DateTime FetchedAt { get; init; }
+
+            /// <summary>Gets the generation of the feed, which starts a new impression batch.</summary>
+            public int Generation { get; init; }
+
+            /// <summary>Gets the recommended charts in server order.</summary>
+            public MajnetSongDetail[] Charts { get; init; }
         }
     }
 }

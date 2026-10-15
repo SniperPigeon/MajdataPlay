@@ -494,6 +494,7 @@ namespace MajdataPlay.Scenes.List
             {
                 _coverListManager.SelectedSong
             };
+            _ = SongStorage.RefreshStaleRecommendAsync();
             var info = new GameInfo(GameMode.Normal, charts, levels);
             Majdata<GameInfo>.Instance = info;
             _pressTime = 0;
@@ -511,6 +512,7 @@ namespace MajdataPlay.Scenes.List
             {
                 _coverListManager.SelectedSong
             };
+            _ = SongStorage.RefreshStaleRecommendAsync();
             var oldinfo = Majdata<GameInfo>.Instance;
             var info = new GameInfo(GameMode.Practice, charts, levels, 114514);
             if (oldinfo is not null && oldinfo.TimeRange is not null)
@@ -576,6 +578,13 @@ namespace MajdataPlay.Scenes.List
                 sceneSwitcher.SetLoadingText(string.Empty);
             }
 
+            // Before the favorites, which may leave an error on the loading screen
+            var recommendTask = SongStorage.RefreshRecommendAsync(progress);
+            while (!recommendTask.IsCompleted)
+            {
+                await UniTask.Yield();
+            }
+
             var onlineFavoritesTask = SongStorage.RefreshUserOnlineFavAsync(progress);
             while (!onlineFavoritesTask.IsCompleted)
             {
@@ -621,6 +630,7 @@ namespace MajdataPlay.Scenes.List
                 DanInfo = danInfo
             };
             Majdata<GameInfo>.Instance = info;
+            _ = SongStorage.RefreshStaleRecommendAsync();
             _collectionListManager.SelectedCollection.Index = 0;
             _isExited = true;
             MajInstances.SceneSwitcher.SwitchScene("Game", false);

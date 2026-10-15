@@ -297,7 +297,7 @@ namespace MajdataPlay.Collections
             var keyword = orderBy.Keyword ?? string.Empty;
             lock (_stateLock)
             {
-                if (Type == ChartStorageType.Dan)
+                if (Type is ChartStorageType.Dan or ChartStorageType.Recommend)
                 {
                     return;
                 }

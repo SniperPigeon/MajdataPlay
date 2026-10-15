@@ -50,6 +50,7 @@ namespace MajdataPlay.Net
         public const string API_GET_MAICHART_SCORE = "maichart/{0}/score";
         public const string API_GET_MACHINE_INFO = "machine/info";
         public const string API_GET_AUTH_CHECK = "machine/auth/check";
+        public const string API_GET_RECOMMEND_FEED = "recommend/feed?source={0}&page={1}&pageSize={2}";
 
         public const string API_POST_USER_LOGIN = "account/login";
         public const string API_POST_USER_LOGOUT = "account/logout";
@@ -58,6 +59,9 @@ namespace MajdataPlay.Net
         public const string API_POST_MACHINE_REGISTER = "machine/register";
         public const string API_POST_AUTH_REQUEST = "machine/auth/request";
         public const string API_POST_AUTH_REVOKE = "machine/auth/revoke";
+
+        // Same value as ImpressionSources.PlayFeed on the server; keeps Play impressions apart from the website's
+        public const string RECOMMEND_SOURCE = "play-feed";
 
         // The "code" of the server's { code, message } body, for login failures with status 403
         const int CODE_ALREADY_LOGGED_IN = 0;
@@ -744,6 +748,53 @@ namespace MajdataPlay.Net
 
             return null;
         }
+        /// <summary>
+        /// Fetches one page of the user's personal recommendations. The server pages a per-user snapshot,
+        /// so pages are stable for its lifetime and a page shorter than <paramref name="pageSize"/> is the last one.
+        /// Uses <see cref="MajEnv.BackgroundHttpClient"/> so leaving the List scene does not cancel it.
+        /// </summary>
+        /// <returns>null if the request failed</returns>
+        public static async ValueTask<MajnetSongDetail[]?> GetRecommendFeedAsync(ApiEndpoint apiEndpoint, int page, int pageSize, CancellationToken token = default)
+        {
+            await UniTask.SwitchToThreadPool();
+            var statistic = GetApiEndpointStatistic(apiEndpoint);
+            if (statistic.IsUserLoggedIn is not true)
+            {
+                return null;
+            }
+            var url = apiEndpoint.Url.Combine(string.Format(API_GET_RECOMMEND_FEED, RECOMMEND_SOURCE, page, pageSize));
+            var rsp = default(EndpointResponse);
+
+            for (var i = 0; i <= MajEnv.HTTP_REQUEST_MAX_RETRY; i++)
+            {
+                rsp = await GetAsync(url, token, MajEnv.BackgroundHttpClient);
+                var e = default(Exception?);
+                if (rsp.IsSuccessfully && rsp.TryDeserialize<MajnetSongDetail[]>(out var charts, out e) && charts is not null)
+                {
+                    return charts;
+                }
+                else if (rsp.ErrorCode == HttpErrorCode.Canceled)
+                {
+                    break;
+                }
+                else if (rsp.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    MajDebug.LogError($"Failed to get recommend feed: user not logged in");
+                    using (await statistic.LockAsync(token))
+                    {
+                        statistic.IsUserLoggedIn = false;
+                    }
+                    break;
+                }
+                else if (rsp.StatusCode is not null)
+                {
+                    MajDebug.LogError($"Failed to get recommend feed: {e?.Message ?? rsp.StatusCode.ToString()}");
+                    break;
+                }
+            }
+
+            return null;
+        }
 
         /// <param name="avatarId">AvatarId of the user's profile; null or empty if the user has no avatar</param>
         public static async ValueTask<Sprite?> GetAvatarAsync(ApiEndpoint apiEndpoint, string? avatarId, CancellationToken token = default, Action<string, bool>? onError = null)
@@ -826,11 +877,11 @@ namespace MajdataPlay.Net
             }
             return new EndpointResponse<UserProfile>(rsp);
         }
-        static async ValueTask<EndpointResponse> GetAsync(Uri uri, CancellationToken token = default)
+        static async ValueTask<EndpointResponse> GetAsync(Uri uri, CancellationToken token = default, HttpClient? client = null)
         {
             try
             {
-                var client = MajEnv.SharedHttpClient;
+                client ??= MajEnv.SharedHttpClient;
                 var rsp = await client.GetAsync(uri, token);
                 var epRsp = default(EndpointResponse);
                 var buffer = await rsp.Content.ReadAsByteArrayAsync();
