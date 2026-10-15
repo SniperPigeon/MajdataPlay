@@ -395,6 +395,8 @@
     "MAJTEXT_SCANNING_CHARTS": "譜面をスキャン中",
     "MAJTEXT_SCANNING_CHARTS_FROM_{0}": "{0} からチャートを取得しています",
     "MAJTEXT_SCANNING_FAVORITES_FROM_{0}": "{0} からお気に入りを取得しています",
+    "MAJTEXT_SCANNING_RECOMMENDATIONS_FROM_{0}": "{0} からおすすめを取得しています",
+    "MAJTEXT_COLLECTION_RECOMMEND_{0}": "おすすめ ({0})",
     "MAJTEXT_ERR_UNKNOWN": "不明なエラーが発生しました。サポートに報告してください。",
     "MAJTEXT_ERR_OBSERROR": "OBS WebSocketに接続できません",
     "MAJTEXT_ERR_VIDEO_PLAYER_PREPARE_TIMEOUT": "動画の読み込みがタイムアウトしたため、曲のジャケットを背景として使用します。",

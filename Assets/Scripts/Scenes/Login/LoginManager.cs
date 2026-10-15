@@ -448,6 +448,12 @@ namespace MajdataPlay.Scenes.Login
                     sceneSwitcher.SetLoadingText(string.Empty);
                 }
             }
+            // Before the favorites, which may leave an error on the loading screen
+            var recommendTask = SongStorage.RefreshRecommendAsync(progress);
+            while (!recommendTask.IsCompleted)
+            {
+                await UniTask.Yield();
+            }
             var task2 = SongStorage.RefreshUserOnlineFavAsync(progress);
             while (!task2.IsCompleted)
             {
