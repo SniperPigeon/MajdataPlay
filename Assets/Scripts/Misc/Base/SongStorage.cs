@@ -351,8 +351,8 @@ namespace MajdataPlay
         }
         /// <summary>
         /// Rebuilds the personal recommendation folders: one for each logged-in endpoint, placed after that
-        /// endpoint's chart list. Folders of endpoints that are no longer logged in are removed.
-        /// Recommendations are optional, so failures are only logged.
+        /// endpoint's chart list. Folders of endpoints that are no longer logged in, or that have nothing to
+        /// recommend, are removed. Recommendations are optional, so failures are only logged.
         /// </summary>
         internal static async Task RefreshRecommendAsync(IProgress<string>? progressReporter = null)
         {
@@ -384,7 +384,8 @@ namespace MajdataPlay
                         MajDebug.LogInfo($"[Online]Fetching recommendations from {api.Url.OriginalString}");
                         progressReporter?.Report(ZString.Format("MAJTEXT_SCANNING_RECOMMENDATIONS_FROM_{0}".i18n(), api.Name));
                         var collection = await FetchRecommendCollectionAsync(api);
-                        if (collection is not null)
+                        // An empty feed is the server saying there is nothing to recommend: no folder
+                        if (collection is not null && !collection.IsEmpty)
                         {
                             recommendCollections.Add(collection);
                         }
@@ -421,6 +422,8 @@ namespace MajdataPlay
         /// Fetches again the recommendation feeds older than <see cref="RECOMMEND_REFRESH_INTERVAL"/>, before the
         /// server stops accepting their impressions. Existing folders are replaced in place, so folder indices stay
         /// valid while another scene is running; the List scene shows the new folders the next time it loads.
+        /// An empty feed therefore empties its folder rather than removing it, and the next
+        /// <see cref="RefreshRecommendAsync"/> drops it. A failed fetch keeps the old folder.
         /// </summary>
         internal static async Task RefreshStaleRecommendAsync()
         {
@@ -443,6 +446,7 @@ namespace MajdataPlay
                     var refreshed = await FetchRecommendCollectionAsync(api);
                     if (refreshed is null)
                     {
+                        // Failed: keep showing the old folder; its fetch time is unchanged, so the next game retries
                         continue;
                     }
                     var collections = Collections.ToArray();
@@ -471,7 +475,11 @@ namespace MajdataPlay
         {
             return _recommendStates.TryGetValue(api, out var state) ? state.Generation : 0;
         }
-        /// <returns>null if the feed could not be fetched or is empty</returns>
+        /// <returns>
+        /// null if the feed could not be fetched; an empty folder if the server has nothing to recommend.
+        /// The server answers 200 [] in that case, and nothing in the old folder is served (so impressions
+        /// for it stop counting), so callers must not keep the old folder then.
+        /// </returns>
         static async Task<OnlineSongCollection?> FetchRecommendCollectionAsync(ApiEndpoint api)
         {
             var charts = new List<MajnetSongDetail>(RECOMMEND_PAGE_SIZE);
@@ -497,10 +505,6 @@ namespace MajdataPlay
                 FetchedAt = DateTime.UtcNow,
                 Generation = Interlocked.Increment(ref _recommendGeneration)
             };
-            if (charts.Count == 0)
-            {
-                return null;
-            }
             // Reuse the endpoint's songs from the chart list, so loaded covers and tracks are shared and the
             // scores are uploaded to the same endpoint. Charts uploaded after the list was fetched get new songs,
             // which join _allCharts to be disposed on the next refresh.
