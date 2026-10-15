@@ -538,14 +538,13 @@ namespace MajdataPlay
         /// valid while another scene is running; the List scene shows the new folders the next time it loads.
         /// An empty feed therefore empties its folder rather than removing it, and the next
         /// <see cref="RefreshRecommendAsync"/> drops it. A failed fetch keeps the old folder.
+        /// Called periodically by the List scene and when a game starts. A refresh already running is waited for,
+        /// so the returned task only completes once the stale feeds were served again.
         /// </summary>
-        /// <returns>A task which completes after the refreshed folders are published, or at once while another refresh runs.</returns>
+        /// <returns>A task which completes after the refreshed folders are published.</returns>
         internal static async Task RefreshStaleRecommendAsync()
         {
-            if (!await s_refreshLock.WaitAsync(0).ConfigureAwait(false))
-            {
-                return;
-            }
+            await s_refreshLock.WaitAsync().ConfigureAwait(false);
             try
             {
                 var now = DateTime.UtcNow;
