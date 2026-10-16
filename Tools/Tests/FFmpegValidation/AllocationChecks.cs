@@ -76,6 +76,7 @@ internal static unsafe class AllocationChecks
         int before = _checks;
         TestConverter(AVPixelFormat.AV_PIX_FMT_RGBA);
         TestConverter(AVPixelFormat.AV_PIX_FMT_YUV420P);
+        _checks += ConversionThreadChecks.RunAllocation();
         TestDecoder(media, new DecoderOptions(), false, false, "Software decoder");
         TestPublicFrameOwnership(media);
         TestSessionStress(media, 1);

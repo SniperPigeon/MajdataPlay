@@ -159,6 +159,9 @@ namespace MajdataPlay.FFmpeg.Internal
         public int DecoderThreadCount { get; private set; }
         /// <summary>Gets how the opened codec parallelizes decoding: <c>frame</c>, <c>slice</c>, <c>codec</c> for library-managed workers, or <c>none</c>.</summary>
         public string DecoderThreadingMode { get; private set; } = "none";
+        /// <summary>Gets the libswscale thread count of the latest CPU RGBA conversion, or zero before one or after a single-call fallback.</summary>
+        /// <remarks>The count is limited by <see cref="DecoderOptions.ConversionThreadCount"/>.</remarks>
+        internal int ConversionScaleThreadCount => _converter.ScaleThreadCount;
 
         /// <summary>Initializes a decoder with the specified resource limits and hardware configuration.</summary>
         /// <param name="options">The options to use without subsequent modification, or null to use the defaults.</param>
@@ -185,7 +188,7 @@ namespace MajdataPlay.FFmpeg.Internal
             }
 
             _framePool = framePool;
-            _converter = new VideoFrameConverter(framePool);
+            _converter = new VideoFrameConverter(framePool, Math.Max(1, Math.Min(_options.ConversionThreadCount, 16)));
         }
 
         /// <summary>Opens the input, reads its video metadata, and initializes the selected decoder on the owning worker.</summary>
@@ -1883,7 +1886,7 @@ namespace MajdataPlay.FFmpeg.Internal
         /// <summary>Resolves an FFmpeg status code to a UTF-8 diagnostic message.</summary>
         /// <param name="error">The native status code to inspect or describe.</param>
         /// <returns>The native error description.</returns>
-        private static string ErrorText(int error)
+        internal static string ErrorText(int error)
         {
             byte* buffer = stackalloc byte[256];
             ffmpeg.av_strerror(error, buffer, 256);

@@ -88,6 +88,8 @@ AV1 软件解码使用构建时静态链接的 `libdav1d`（也兼容包含 `lib
 
 播放器会话按队列容量加 2 预分配呈现帧容器，供工作线程、队列和主线程流转；帧释放原生资源后归还本会话。稳定解码、RGBA 转换和呈现使用复用容器，`EAGAIN` 比较不装箱，Android 图像释放委托只在建立硬件会话时创建。这里的无分配指预热后的托管 GC 分配；FFmpeg 原生帧引用、像素缓冲区及驱动内部仍按各自生命周期分配和释放。
 
+CPU RGBA 上传路径按 `DecoderOptions.ConversionThreadCount`（默认在逻辑处理器不超过 4 个时为 1，否则为 `clamp(处理器数 - 2, 1, 4)`）让 libswscale 按 slice 多线程转换，并把垂直翻转或旋转复制分成 16 行对齐的行带交给按需创建的后台线程；这些线程不调用 Unity API，预热后不产生托管分配。验证方法见 [多线程 RGBA 转换](../../../../Tools/Tests/FFmpegValidation/README.md#多线程-rgba-转换)。
+
 公开 `FFmpegVideoDecoder` 构造器与 `DecodedVideoFrame.CopyToSoftware()` 保留独立帧对象的所有权语义，返回对象仍会分配。内部复用帧不通过播放器事件暴露，避免已释放的外部旧引用影响后来租用的帧。打开、seek 日志、回退、纹理重建及调用方事件处理器不在稳定逐帧零 GC 范围内。
 
 ## 图形后端与纹理传输

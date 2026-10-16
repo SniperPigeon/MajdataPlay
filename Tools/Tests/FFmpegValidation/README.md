@@ -226,6 +226,27 @@ Windows D3D11 原生纹理路径为了让 worker 侧 GPU 完成标记覆盖每�
 
 此 .NET 9 检查不启动 Unity，也不覆盖 D3D12/Vulkan 渲染器下先经 `FallbackHardwareOptions` 多次重开再到软解的播放器链路，也不覆盖码流中途更换参数集被拒绝的情形（该情形会丢弃旧 codec 中尚未输出的重排帧）；Unity Player 与移动平台的实际表现仍需按下文 Player 流程验证。
 
+### 多线程 RGBA 转换
+
+```powershell
+dotnet run --project Tools/Tests/FFmpegValidation/FFmpegValidation.csproj -- `
+  Assets/Plugins/MajdataPlay/FFmpeg/Native/Windows/x86_64 `
+  "Assets/StreamingAssets/MaiCharts/Original/Zunda Overdance/bg.mp4" --conversion-threads
+```
+
+CPU 上传路径的 `VideoFrameConverter` 用 `sws_alloc_context` 设置 `SwsContext` 的尺寸、格式、range、`flags` 与 `threads` 后 `sws_init_context`，再以 `sws_frame_start` + `sws_send_slice(0, 高)` + `sws_receive_slice(0, 高)` + `sws_frame_end` 让 libswscale 按 slice 多线程转换到 64 字节对齐的 RGBA staging 帧；任一步失败时释放上下文、本帧回退到原单次 `sws_scale`，下一帧重建上下文，同一尺寸/格式再次失败则持续回退直到尺寸或格式变化。之后的垂直翻转或四分之一旋转复制按 16 行对齐的行带分给首次多带转换时才创建的后台线程（`FFmpeg Video Band N`），调用线程也参与，并等待所有已领取的行带完成后才返回或重抛异常。线程数由 `DecoderOptions.ConversionThreadCount` 决定（包含解码 worker，钳制到 1–16）：默认在逻辑处理器不超过 4 个时为 1，否则为 `clamp(处理器数 - 2, 1, 4)`，与 codec 的 `ThreadCount = min(处理器数, 8)` 共存；libswscale 与复制两阶段先后执行，不同时占用。`DecodedVideoFrame.CopyToSoftware` 仍为单线程。
+
+此模式不需要 GPU，检查内容：
+- 行带执行器：20000 次交替发布两个不同 job、2–24 个行带，每个行带只属于当前 job 且恰好执行一次，返回前全部完成；失败的行带在所有已领取行带完成后重抛，之后执行器仍可用；单行带内联运行不建线程，多行带后才启动线程；Dispose 后拒绝新 job。
+- 逐字节一致：`yuv420p`、`yuv420p10le`、`nv12`、`p010le`、`yuv444p`，高度 513/1079/1081（每线程至少 64 行且最后一带不均匀）、宽度 1–65 与 1920，luma 横向渐变、chroma 纵向渐变，limited/full 两种 range、0/90/180/270 四种旋转；2–8 个线程（含奇数）的输出与 1 线程逐字节相同，并通过初始化后的 `SwsContext.threads` 断言 libswscale 实际使用 N 个线程、复制至少使用 2 个行带；抽样宽度另与独立的单次 `sws_scale` 结果逐像素比对方向与颜色。
+- 分配：用 `GC.GetTotalAllocatedBytes(precise: true)` 统计包括行带线程在内的整个进程，4 线程转换 1280×721 的 `yuv420p`/`nv12`/`p010le` 帧，预热后 256 帧的托管分配为 **0 B**（`--allocations` 与 `--allocations-software` 也运行此项）。
+- 解码器：`ConversionThreadCount = 1` 与 `4` 的软件解码器对真实素材前 24 帧输出相同像素，实际 libswscale 线程数分别为 1 与 4；0、负数和 64 被钳制到 1–16。
+- 输出 1080p 与 4K 的 `yuv420p`、`nv12` 在 0°/90° 下 1/2/4/8 线程的每帧耗时，仅供参考，不作为断言。
+
+Windows x64 Release 参考结果（16 逻辑处理器，默认 4 线程）：1080p `yuv420p` 每帧约 5.3 ms → 2.4 ms，`nv12` 约 9.8 ms → 4.0 ms；4K `yuv420p` 约 20.7 ms → 11.4 ms，`nv12` 约 39.8 ms → 17.4 ms。90° 旋转的复制按列写入，受内存带宽限制，加速有限。
+
+此 .NET 9 检查只覆盖 Windows x64 原生库与 CoreCLR；Android、iOS、macOS、Linux 以及 Unity Mono/IL2CPP Player 中的线程行为、分配与耗时未验证，需要按下文 Player 流程另行确认。
+
 ### Camera 录制的托管与真实编码验证
 
 不带参数的默认测试还验证 `EncoderOptions` 的尺寸、帧率、最大软件线程数、目标/最大码率和枚举边界，以及构造时的设置快照。编译 Camera 组件需主项目已用指定 Unity Editor 完成导入，以提供 `Library/ScriptAssemblies` 中的 `Unity.Collections` 与 `Unity.RenderPipelines.Core.Runtime`；测试只引用这些程序集，不调用 Unity 的 Camera 或 GPU API。
@@ -282,7 +303,7 @@ dotnet run --project Tools/Tests/FFmpegValidation/FFmpegValidation.csproj -- `
   "Assets/StreamingAssets/MaiCharts/Original/Zunda Overdance/bg.mp4" --allocations
 ```
 
-`--allocations` 用真实 FFmpeg 库分别验证人工 RGBA/YUV 帧转换、软件解码、D3D11VA 下载并转换为 RGBA，以及 D3D11VA 原生帧。先正向校验 `GC.GetAllocatedBytesForCurrentThread()` 能观测已知数组分配，再对每条路径预热并断言一批帧的托管分配总量为 **0 B**；转换测量 512 帧，解码测量最多 120 帧。素材需可 seek、至少含 64 帧且长于 2 秒，以覆盖会话压力检查。没有支持该素材的 D3D11VA GPU 时，可改用 `--allocations-software` 只运行转换和软件解码；该模式也可使用 AV1 素材。
+`--allocations` 用真实 FFmpeg 库分别验证人工 RGBA/YUV 帧转换、软件解码、D3D11VA 下载并转换为 RGBA，以及 D3D11VA 原生帧。先正向校验 `GC.GetAllocatedBytesForCurrentThread()` 能观测已知数组分配，再对每条路径预热并断言一批帧的托管分配总量为 **0 B**；转换测量 512 帧，解码测量最多 120 帧；多线程转换另用 `GC.GetTotalAllocatedBytes(precise: true)` 统计包括行带线程在内的整个进程（见“多线程 RGBA 转换”）。素材需可 seek、至少含 64 帧且长于 2 秒，以覆盖会话压力检查。没有支持该素材的 D3D11VA GPU 时，可改用 `--allocations-software` 只运行转换和软件解码；该模式也可使用 AV1 素材。
 
 不带参数的默认测试检查预分配帧池的固定容量、同时持有的帧互不别名、重复 Dispose、释放回调抛异常后归还、跨线程归还、元数据重置与 4096 次租用/归还的 0 B 分配。真实解码测试额外检查解码器关闭后尚未归还的 CPU/原生帧仍可释放、归还后池容量完整，以及公开解码器返回的独立帧不会复用旧对象，因此迟到的重复 Dispose 不会影响后续帧。容量 1/8 的实际会话还覆盖持有显示帧时持续取帧、连续 seek、关闭与释放。播放器内部池化帧遵循独占租用约定：Dispose 后不可继续使用旧引用。
 

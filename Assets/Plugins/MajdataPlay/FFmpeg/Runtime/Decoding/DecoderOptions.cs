@@ -21,6 +21,13 @@ namespace MajdataPlay.FFmpeg.Internal
         /// format, the decoder reopens a software decoder with this thread count instead of decoding single-threaded.
         /// </remarks>
         public int ThreadCount { get; set; } = Math.Min(Environment.ProcessorCount, 8);
+        /// <summary>Gets or sets the requested thread count for CPU RGBA conversion, which is clamped to the range 1 through 16.</summary>
+        /// <remarks>
+        /// The count includes the decoder worker and applies to both libswscale slice conversion and the banded vertical flip
+        /// or rotation copy, which run one after the other. The default leaves processors to the codec threads and Unity:
+        /// one thread with four or fewer logical processors, otherwise the processor count minus two, capped at four.
+        /// </remarks>
+        public int ConversionThreadCount { get; set; } = Environment.ProcessorCount <= 4 ? 1 : Math.Min(Environment.ProcessorCount - 2, 4);
         /// <summary>Gets or sets whether hardware frames should retain native GPU resources for presentation.</summary>
         /// <remarks>When disabled, hardware frames are downloaded or obtained as CPU pixels for RGBA upload.</remarks>
         public bool KeepNativeFrames { get; set; }

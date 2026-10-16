@@ -31,6 +31,7 @@ static class Program
             var eviction = args.Length == 3 && args[2] == "--eviction";
             var decodeSynchronization = args.Length == 3 && args[2] == "--decode-sync";
             var hardwareRejected = args.Length == 3 && args[2] == "--hardware-rejected";
+            var conversionThreads = args.Length == 3 && args[2] == "--conversion-threads";
             bool av1 = args.Length == 3 && args[2] == "--av1";
             bool av1Unavailable = args.Length == 3 && args[2] == "--av1-unavailable";
             bool allocations = args.Length == 3 && args[2] == "--allocations";
@@ -42,9 +43,9 @@ static class Program
             var encodingSoftware = args.Length == 3 && args[2] == "--encode-software";
             if (args.Length != 2 && !av1 && !av1Unavailable && !allocations && !softwareAllocations
                 && !encoding && !encodingUnavailable && !encodingHardware && !uncheckedAmf && !encodingSoftware
-                && !eviction && !decodeSynchronization && !hardwareRejected)
+                && !eviction && !decodeSynchronization && !hardwareRejected && !conversionThreads)
             {
-                Console.WriteLine("PASS: " + _checks + " assertions; clock, bitrate, frame pool, encoder options and opaque content normalization; use <native-directory> --native-content for Windows protocol checks, <native-directory> <media> [--av1|--av1-unavailable|--allocations|--allocations-software|--eviction|--decode-sync|--hardware-rejected], or <native-directory> <output-directory> --encode[|-unavailable|-hardware|-unchecked-amf|-software].");
+                Console.WriteLine("PASS: " + _checks + " assertions; clock, bitrate, frame pool, encoder options and opaque content normalization; use <native-directory> --native-content for Windows protocol checks, <native-directory> <media> [--av1|--av1-unavailable|--allocations|--allocations-software|--eviction|--decode-sync|--hardware-rejected|--conversion-threads], or <native-directory> <output-directory> --encode[|-unavailable|-hardware|-unchecked-amf|-software].");
                 return 0;
             }
             string native = Path.GetFullPath(args[0]);
@@ -107,6 +108,12 @@ static class Program
             {
                 _checks += HardwareRejectionChecks.RunNative(Path.GetFullPath(args[1]));
                 Console.WriteLine("PASS: " + _checks + " assertions; multi-threaded software decoding after D3D11VA rejection, single-thread configuration, CPU-upload threads, strict and fallback rejection.");
+                return 0;
+            }
+            if (conversionThreads)
+            {
+                _checks += ConversionThreadChecks.Run(Path.GetFullPath(args[1]));
+                Console.WriteLine("PASS: " + _checks + " assertions; byte-exact 1-vs-N threaded RGBA conversion, band executor, zero allocation across threads and decoder thread budget.");
                 return 0;
             }
             if (av1)
