@@ -14,13 +14,13 @@ namespace MajdataPlay.Scenes.Game.Utils
     internal static class NoteHelper
     {
         /// <summary>
-        /// Converts the gameplay sprite stack to world-space Z coordinates.
+        /// Converts the gameplay sprite stack to parent-relative Z coordinates.
         /// Smaller Z coordinates are drawn closer to the gameplay camera.
         /// </summary>
         internal static class Sorting
         {
             /// <summary>
-            /// Separates adjacent gameplay groups within the camera's visible depth range.
+            /// Separates adjacent gameplay groups in their parent plane.
             /// </summary>
             private const float LayerSpacing = 0.4f;
 
@@ -57,11 +57,11 @@ namespace MajdataPlay.Scenes.Game.Utils
 
             /// <summary>
             /// Gets a sprite's Z index without the signed 16-bit renderer order limit.
-            /// Each group occupies a disjoint, bounded depth range in front of the camera.
+            /// Each group occupies a disjoint, bounded depth range relative to its parent.
             /// </summary>
             /// <param name="layer">The sprite's gameplay group.</param>
             /// <param name="sortOrder">The front-to-back priority; larger values appear in front.</param>
-            /// <returns>The world-space Z coordinate for the sprite.</returns>
+            /// <returns>The local Z index for the sprite's gameplay group.</returns>
             internal static float GetZIndex(NoteLayer layer, int sortOrder = 0)
             {
                 var offset = OrderDepth * sortOrder / (OrderScale + Math.Abs((double)sortOrder));
@@ -69,17 +69,18 @@ namespace MajdataPlay.Scenes.Game.Utils
             }
 
             /// <summary>
-            /// Assigns a sprite to Default with zero order and positions its pivot by depth.
+            /// Assigns a sprite to Default with zero order and positions its pivot by local depth.
             /// </summary>
             /// <param name="renderer">The sprite renderer to configure.</param>
             /// <param name="layer">The sprite's gameplay group.</param>
             /// <param name="sortOrder">The priority within the gameplay group.</param>
-            internal static void Apply(SpriteRenderer renderer, NoteLayer layer, int sortOrder = 0)
+            /// <param name="parentZIndex">The sorting index already assigned to a parent note, or zero for a root sprite.</param>
+            internal static void Apply(SpriteRenderer renderer, NoteLayer layer, int sortOrder = 0, float parentZIndex = 0f)
             {
                 renderer.sortingLayerID = 0;
                 renderer.sortingOrder = 0;
                 renderer.spriteSortPoint = SpriteSortPoint.Pivot;
-                SetZPosition(renderer.transform, GetZIndex(layer, sortOrder));
+                SetLocalZPosition(renderer.transform, GetZIndex(layer, sortOrder) - parentZIndex);
             }
 
             /// <summary>
@@ -105,15 +106,15 @@ namespace MajdataPlay.Scenes.Game.Utils
             }
 
             /// <summary>
-            /// Changes a transform's depth without changing its playfield coordinates.
+            /// Changes a transform's local depth without changing its local X and Y coordinates.
             /// </summary>
             /// <param name="transform">The transform to position.</param>
-            /// <param name="z">The desired world-space Z coordinate.</param>
-            internal static void SetZPosition(Transform transform, float z)
+            /// <param name="z">The desired local Z coordinate.</param>
+            internal static void SetLocalZPosition(Transform transform, float z)
             {
-                var position = transform.position;
+                var position = transform.localPosition;
                 position.z = z;
-                transform.position = position;
+                transform.localPosition = position;
             }
         }
 

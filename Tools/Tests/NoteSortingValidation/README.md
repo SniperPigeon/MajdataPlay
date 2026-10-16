@@ -15,9 +15,14 @@ sensor mapping and other `NoteHelper` methods are outside this check.
 
 The checks cover all category bands, signed 16-bit boundaries, sampled long-chart
 orders and int32 extremes; body/end/EX priorities through orders +/-65536; pooled
-SpriteRenderer layer/order/pivot reset; world and local XY movement under a rotated,
-scaled, translated parent; and preserving depth while a Touch fan moves.
-Collapsed and expanded XY scales preserve each child's depth as well.
+SpriteRenderer layer/order/pivot reset; assignment of the Z index to local position
+under translated, rotated and Z-scaled parents; and world/local XY movement while
+preserving that index. Parent movement and reparenting with local coordinates
+preserve the assigned local index while world depth follows the new parent. A tilted
+parent also checks that setting local Z preserves local X and Y. Nested Tap/Hold
+body, EX and endpoint renderers use relative child offsets, preserving their world
+priority without duplicating the body category depth. Collapsed and expanded XY
+scales preserve each child's depth as well.
 The serialized scan checks complete SpriteRenderer records in `Game.unity`, every
 Game prefab and UI TouchFeedback, plus sorting overrides in prefab variants and the
 scene. It also checks the Hold particle, RawSprite TouchHold border and three

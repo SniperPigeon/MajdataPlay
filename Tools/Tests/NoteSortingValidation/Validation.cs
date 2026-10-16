@@ -26,6 +26,7 @@ namespace NoteSortingValidation
         {
             ValidateDepthOrder();
             ValidateTransforms();
+            ValidateNestedRenderers();
             ValidateRendering();
             Debug.Log("NOTE_SORTING_RENDERING_PASSED");
             ValidateAssets();
@@ -40,6 +41,7 @@ namespace NoteSortingValidation
         {
             ValidateDepthOrder();
             ValidateTransforms();
+            ValidateNestedRenderers();
             ValidateAssets();
             Debug.Log("NOTE_SORTING_VALIDATION_PASSED");
         }
@@ -50,7 +52,7 @@ namespace NoteSortingValidation
         /// <exception cref="InvalidOperationException">A depth check fails.</exception>
         private static void ValidateDepthOrder()
         {
-            var layers = (Sorting.Layer[])Enum.GetValues(typeof(Sorting.Layer));
+            var layers = (Sorting.NoteLayer[])Enum.GetValues(typeof(Sorting.NoteLayer));
             var orders = new[] { int.MinValue, -1000000, -65536, -32769, -32768, -1, 0, 1, 32767, 32768, 32769, 65536, 1000000, int.MaxValue };
             for (var i = 0; i < layers.Length; i++)
             {
@@ -74,17 +76,17 @@ namespace NoteSortingValidation
 
             foreach (var order in new[] { -65536, -32769, -32768, -3, 0, 32767, 32768, 65536 })
             {
-                var body = Sorting.GetZIndex(Sorting.Layer.Tap, order - 1);
-                var end = Sorting.GetZIndex(Sorting.Layer.Tap, order - 2);
-                var ex = Sorting.GetZIndex(Sorting.Layer.Tap, order);
+                var body = Sorting.GetZIndex(Sorting.NoteLayer.Tap, order - 1);
+                var end = Sorting.GetZIndex(Sorting.NoteLayer.Tap, order - 2);
+                var ex = Sorting.GetZIndex(Sorting.NoteLayer.Tap, order);
                 Check(ex < body && body < end, $"Hold EX/body/end priority {order}");
-                var justBorder = Sorting.GetZIndex(Sorting.Layer.Touch, order - 1);
-                var point = Sorting.GetZIndex(Sorting.Layer.Touch, order - 2);
+                var justBorder = Sorting.GetZIndex(Sorting.NoteLayer.Touch, order - 1);
+                var point = Sorting.GetZIndex(Sorting.NoteLayer.Touch, order - 2);
                 Check(justBorder < point, $"Touch just-border/point priority {order}");
                 var previous = point;
                 for (var fan = 0; fan < 4; fan++)
                 {
-                    var z = Sorting.GetZIndex(Sorting.Layer.Touch, order - (3 + fan));
+                    var z = Sorting.GetZIndex(Sorting.NoteLayer.Touch, order - (3 + fan));
                     Check(previous < z, $"Touch fan {fan} priority {order}");
                     previous = z;
                 }
@@ -93,12 +95,13 @@ namespace NoteSortingValidation
         }
 
         /// <summary>
-        /// Checks pooled renderer reset and world/local movement under transformed parents.
+        /// Checks local depth assignment and movement under transformed parents.
         /// </summary>
         /// <exception cref="InvalidOperationException">A renderer or transform check fails.</exception>
         private static void ValidateTransforms()
         {
             var parent = new GameObject("Sorting parent");
+            var alternateParent = new GameObject("Alternate sorting parent");
             var child = new GameObject("Sorting child");
             try
             {
@@ -111,46 +114,135 @@ namespace NoteSortingValidation
                 renderer.sortingLayerName = "Tap";
                 renderer.sortingOrder = 123;
                 renderer.spriteSortPoint = SpriteSortPoint.Center;
-                var original = child.transform.position;
-                Sorting.Apply(renderer, Sorting.Layer.Touch, -32769);
+                var original = child.transform.localPosition;
+                Sorting.Apply(renderer, Sorting.NoteLayer.Touch, -32769);
                 Check(renderer.sortingLayerID == 0 && renderer.sortingLayerName == "Default", "Apply resets sorting layer");
                 Check(renderer.sortingOrder == 0 && renderer.spriteSortPoint == SpriteSortPoint.Pivot, "Apply resets order and pivot");
-                Near(child.transform.position.x, original.x, "Apply preserves world X");
-                Near(child.transform.position.y, original.y, "Apply preserves world Y");
-                var z = Sorting.GetZIndex(Sorting.Layer.Touch, -32769);
-                Near(child.transform.position.z, z, "Apply sets world Z");
+                Near(child.transform.localPosition.x, original.x, "Apply preserves local X");
+                Near(child.transform.localPosition.y, original.y, "Apply preserves local Y");
+                var z = Sorting.GetZIndex(Sorting.NoteLayer.Touch, -32769);
+                Near(child.transform.localPosition.z, z, "Apply sets local Z");
+                Near(child.transform.position.z, 12 + 2 * z, "Apply inherits parent depth and Z scale");
+                var worldZ = child.transform.position.z;
                 for (var frame = 0; frame < 120; frame++)
                 {
                     var angle = frame * Mathf.PI / 60;
                     Sorting.SetPosition(child.transform, new Vector3(Mathf.Cos(angle) * 4, Mathf.Sin(angle) * 4, 99));
-                    Near(child.transform.position.z, z, "Touch fan movement preserves world Z");
+                    Near(child.transform.position.z, worldZ, "World XY movement preserves world Z");
+                    Near(child.transform.localPosition.z, z, "Planar world XY movement preserves local Z");
                 }
-                var localZ = child.transform.localPosition.z;
                 Sorting.SetLocalPosition(child.transform, new Vector3(-2, 7, 99));
                 Near(child.transform.localPosition.x, -2, "SetLocalPosition X");
                 Near(child.transform.localPosition.y, 7, "SetLocalPosition Y");
-                Near(child.transform.localPosition.z, localZ, "SetLocalPosition preserves local Z");
-                original = child.transform.position;
-                Sorting.SetZPosition(child.transform, -7);
-                Near(child.transform.position.x, original.x, "SetZPosition preserves X");
-                Near(child.transform.position.y, original.y, "SetZPosition preserves Y");
-                Near(child.transform.position.z, -7, "SetZPosition sets Z");
-                Sorting.Apply(renderer, Sorting.Layer.Slides, 32769);
-                Near(child.transform.position.z, Sorting.GetZIndex(Sorting.Layer.Slides, 32769), "Pooled renderer changes category");
-                z = child.transform.position.z;
+                Near(child.transform.localPosition.z, z, "SetLocalPosition preserves local Z");
+                original = child.transform.localPosition;
+                Sorting.SetLocalZPosition(child.transform, -7);
+                Near(child.transform.localPosition.x, original.x, "SetLocalZPosition preserves local X");
+                Near(child.transform.localPosition.y, original.y, "SetLocalZPosition preserves local Y");
+                Near(child.transform.localPosition.z, -7, "SetLocalZPosition sets local Z");
+                Near(child.transform.position.z, -2, "SetLocalZPosition inherits parent depth and Z scale");
+                Sorting.Apply(renderer, Sorting.NoteLayer.Slides, 32769);
+                z = Sorting.GetZIndex(Sorting.NoteLayer.Slides, 32769);
+                Near(child.transform.localPosition.z, z, "Pooled renderer changes local category");
+                worldZ = child.transform.position.z;
                 foreach (var scale in new[] { 0f, 0.5f, 1f, 3f })
                 {
                     parent.transform.localScale = new Vector3(scale, scale, 2);
                     Sorting.SetLocalPosition(child.transform, new Vector3(scale, -scale, 0));
-                    Near(child.transform.position.z, z, $"XY scale {scale} preserves child depth");
+                    Near(child.transform.localPosition.z, z, $"XY scale {scale} preserves local depth");
+                    Near(child.transform.position.z, worldZ, $"XY scale {scale} preserves inherited world depth");
                 }
+                parent.transform.position += new Vector3(0, 0, 5);
+                Near(child.transform.localPosition.z, z, "Parent movement preserves local index");
+                Near(child.transform.position.z, worldZ + 5, "Child inherits parent depth movement");
+
+                alternateParent.transform.position = new Vector3(1, 8, -7);
+                alternateParent.transform.rotation = Quaternion.Euler(0, 0, -12);
+                alternateParent.transform.localScale = new Vector3(0.5f, 2, 3);
+                original = child.transform.localPosition;
+                child.transform.SetParent(alternateParent.transform, false);
+                Near(child.transform.localPosition.x, original.x, "Local reparent preserves local X");
+                Near(child.transform.localPosition.y, original.y, "Local reparent preserves local Y");
+                Near(child.transform.localPosition.z, z, "Local reparent preserves assigned index");
+                Near(child.transform.position.z, -7 + 3 * z, "Local reparent inherits new parent depth and Z scale");
+
+                alternateParent.transform.rotation = Quaternion.Euler(20, 30, -12);
+                original = child.transform.localPosition;
+                Sorting.SetLocalZPosition(child.transform, -4);
+                Near(child.transform.localPosition.x, original.x, "Tilted parent preserves local X");
+                Near(child.transform.localPosition.y, original.y, "Tilted parent preserves local Y");
+                Near(child.transform.localPosition.z, -4, "Tilted parent sets local Z");
             }
             finally
             {
                 Object.DestroyImmediate(child);
+                Object.DestroyImmediate(alternateParent);
                 Object.DestroyImmediate(parent);
             }
-            Debug.Log("NOTE_SORTING_TRANSFORMS_PASSED: pooled reset and world/local movement");
+            Debug.Log("NOTE_SORTING_TRANSFORMS_PASSED: local indices, pooled reset, movement and transformed parents");
+        }
+
+        /// <summary>
+        /// Checks nested Tap and Hold components use relative local depth without duplicating the body index.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">A nested renderer priority check fails.</exception>
+        private static void ValidateNestedRenderers()
+        {
+            var parent = new GameObject("Nested sorting parent");
+            var bodyObject = new GameObject("Tap or Hold body");
+            var exObject = new GameObject("Tap or Hold EX");
+            var endObject = new GameObject("Hold end");
+            try
+            {
+                parent.transform.position = new Vector3(5, -4, 12);
+                parent.transform.rotation = Quaternion.Euler(0, 0, 37);
+                parent.transform.localScale = new Vector3(2, 3, 2);
+                bodyObject.transform.SetParent(parent.transform, false);
+                bodyObject.transform.localScale = new Vector3(1.5f, 2, 1);
+                exObject.transform.SetParent(bodyObject.transform, false);
+                endObject.transform.SetParent(bodyObject.transform, false);
+                var body = bodyObject.AddComponent<SpriteRenderer>();
+                var ex = exObject.AddComponent<SpriteRenderer>();
+                var end = endObject.AddComponent<SpriteRenderer>();
+                foreach (var order in new[] { -32768, 0, 32768 })
+                {
+                    var bodyZ = Sorting.GetZIndex(Sorting.NoteLayer.Tap, order - 1);
+                    var exZ = Sorting.GetZIndex(Sorting.NoteLayer.Tap, order);
+                    var endZ = Sorting.GetZIndex(Sorting.NoteLayer.Tap, order - 2);
+                    Sorting.Apply(body, Sorting.NoteLayer.Tap, order - 1);
+                    Sorting.Apply(ex, Sorting.NoteLayer.Tap, order, bodyZ);
+                    Sorting.Apply(end, Sorting.NoteLayer.Tap, order - 2, bodyZ);
+                    Near(body.transform.localPosition.z, bodyZ, $"Nested body local index {order}");
+                    Near(ex.transform.localPosition.z, exZ - bodyZ, $"Nested EX relative local index {order}");
+                    Near(end.transform.localPosition.z, endZ - bodyZ, $"Nested end relative local index {order}");
+                    Check(ex.transform.localPosition.z < 0 && end.transform.localPosition.z > 0, $"Nested EX/body/end local priority {order}");
+                    Near(ex.transform.position.z, 12 + 2 * exZ, $"Nested EX inherits one category index {order}");
+                    Near(end.transform.position.z, 12 + 2 * endZ, $"Nested end inherits one category index {order}");
+                    Check(ex.transform.position.z < body.transform.position.z && body.transform.position.z < end.transform.position.z,
+                        $"Nested EX/body/end world priority {order}");
+                }
+                var bodyLocalZ = body.transform.localPosition.z;
+                var exLocalZ = ex.transform.localPosition.z;
+                var endLocalZ = end.transform.localPosition.z;
+                var bodyWorldZ = body.transform.position.z;
+                var exWorldZ = ex.transform.position.z;
+                var endWorldZ = end.transform.position.z;
+                parent.transform.position += new Vector3(0, 0, 5);
+                Near(body.transform.localPosition.z, bodyLocalZ, "Parent movement preserves nested body local index");
+                Near(ex.transform.localPosition.z, exLocalZ, "Parent movement preserves nested EX local index");
+                Near(end.transform.localPosition.z, endLocalZ, "Parent movement preserves nested end local index");
+                Near(body.transform.position.z, bodyWorldZ + 5, "Nested body inherits parent depth movement");
+                Near(ex.transform.position.z, exWorldZ + 5, "Nested EX inherits parent depth movement");
+                Near(end.transform.position.z, endWorldZ + 5, "Nested end inherits parent depth movement");
+            }
+            finally
+            {
+                Object.DestroyImmediate(endObject);
+                Object.DestroyImmediate(exObject);
+                Object.DestroyImmediate(bodyObject);
+                Object.DestroyImmediate(parent);
+            }
+            Debug.Log("NOTE_SORTING_NESTED_PASSED: Tap and Hold relative component depths preserve EX/body/end priority");
         }
 
         /// <summary>
@@ -349,8 +441,8 @@ namespace NoteSortingValidation
                 camera.targetTexture = target;
                 foreach (var reverse in new[] { false, true })
                 {
-                    Sorting.Apply(rear, reverse ? Sorting.Layer.Touch : Sorting.Layer.Tap);
-                    Sorting.Apply(front, reverse ? Sorting.Layer.Tap : Sorting.Layer.Touch);
+                    Sorting.Apply(rear, reverse ? Sorting.NoteLayer.Touch : Sorting.NoteLayer.Tap);
+                    Sorting.Apply(front, reverse ? Sorting.NoteLayer.Tap : Sorting.NoteLayer.Touch);
                     camera.Render();
                     RenderTexture.active = target;
                     readback.ReadPixels(new Rect(0, 0, 64, 64), 0, 0);

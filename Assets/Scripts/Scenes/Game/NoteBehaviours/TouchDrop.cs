@@ -87,7 +87,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             _pointObject.SetActive(true);
             _justBorderObject.SetActive(true);
 
-            Transform.position = new Vector3(0, 0, 0);
+            NoteHelper.Sorting.SetPosition(Transform, Vector3.zero);
             SetFansColor(new Color(1f, 1f, 1f, 0f));
             SetFansPosition(TouchFanStartDistance);
 
@@ -141,7 +141,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
 
             LoadSkin();
 
-            Transform.position = NoteHelper.GetTouchAreaPosition(SensorPos);
+            NoteHelper.Sorting.SetPosition(Transform, NoteHelper.GetTouchAreaPosition(SensorPos));
             //_pointObject.SetActive(false);
             //_justBorderObject.SetActive(false);
 

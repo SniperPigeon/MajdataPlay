@@ -157,9 +157,9 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             {
                 _animator.SetTrigger(MODERN_ANIM_HASH);
             }
-            var z = Transform.position.z;
+            var z = Transform.localPosition.z;
             _animator.Update(0.0000001f);
-            NoteHelper.Sorting.SetZPosition(Transform, z);
+            NoteHelper.Sorting.SetLocalZPosition(Transform, z);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void OnUpdate()
@@ -167,9 +167,9 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             using (UnityProfiler.Create("SlideOK.OnUpdate"))
             {
                 var delta = MajTimeline.DeltaTime;
-                var z = Transform.position.z;
+                var z = Transform.localPosition.z;
                 _animator.Update(delta);
-                NoteHelper.Sorting.SetZPosition(Transform, z);
+                NoteHelper.Sorting.SetLocalZPosition(Transform, z);
                 if (_elapsedTime > 0.5f)
                 {
                     State = NoteStatus.End;

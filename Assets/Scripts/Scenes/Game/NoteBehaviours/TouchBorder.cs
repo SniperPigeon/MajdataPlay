@@ -33,7 +33,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                 _ => 'C',
             };
             var pos = NoteHelper.GetTouchAreaPosition(index, area);
-            transform.position = pos;
+            NoteHelper.Sorting.SetPosition(transform, pos);
             var scale = transform.localScale;
             transform.localScale = new Vector3(scale.x * USERSETTING_TOUCH_SCALE, scale.y * USERSETTING_TOUCH_SCALE, 1f);
             _two = transform.GetChild(0).gameObject;

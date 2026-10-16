@@ -154,8 +154,8 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             _thisRenderer.size = new Vector2(1.22f, 1.4f);
             _exRenderer.size = new Vector2(1.22f, 1.4f);
             NoteHelper.Sorting.Apply(_thisRenderer, NoteHelper.Sorting.NoteLayer.Tap, SortOrder - _spriteSortOrder);
-            NoteHelper.Sorting.Apply(_exRenderer, NoteHelper.Sorting.NoteLayer.Tap, SortOrder - _exSortOrder);
-            NoteHelper.Sorting.Apply(_endRenderer, NoteHelper.Sorting.NoteLayer.Tap, SortOrder - _endSortOrder);
+            NoteHelper.Sorting.Apply(_exRenderer, NoteHelper.Sorting.NoteLayer.Tap, SortOrder - _exSortOrder, parentZIndex: Transform.localPosition.z);
+            NoteHelper.Sorting.Apply(_endRenderer, NoteHelper.Sorting.NoteLayer.Tap, SortOrder - _endSortOrder, parentZIndex: Transform.localPosition.z);
             NoteHelper.Sorting.Apply(_tapLineRenderer, NoteHelper.Sorting.NoteLayer.TapLines);
 
             LoadSkin();

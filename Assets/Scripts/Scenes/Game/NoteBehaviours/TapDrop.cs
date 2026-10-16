@@ -115,7 +115,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
 
             _tapLineObject.transform.rotation = Quaternion.Euler(0, 0, -22.5f + (-45f * (StartPos - 1)));
             NoteHelper.Sorting.Apply(_thisRenderer, NoteHelper.Sorting.NoteLayer.Tap, SortOrder - TAP_SPRITE_SORT_ORDER);
-            NoteHelper.Sorting.Apply(_exRenderer, NoteHelper.Sorting.NoteLayer.Tap, SortOrder - TAP_EX_SORT_ORDER);
+            NoteHelper.Sorting.Apply(_exRenderer, NoteHelper.Sorting.NoteLayer.Tap, SortOrder - TAP_EX_SORT_ORDER, parentZIndex: Transform.localPosition.z);
             NoteHelper.Sorting.Apply(_tapLineRenderer, NoteHelper.Sorting.NoteLayer.TapLines);
 
             LoadSkin();

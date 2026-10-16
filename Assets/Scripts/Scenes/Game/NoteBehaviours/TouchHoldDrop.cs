@@ -96,7 +96,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             _pointObject.SetActive(true);
             _borderObject.SetActive(true);
 
-            Transform.position = new Vector3(0, 0, 0);
+            NoteHelper.Sorting.SetPosition(Transform, Vector3.zero);
             SetFansColor(new Color(1f, 1f, 1f, 0f));
             SetFansPosition(TouchFanStartDistance);
 
@@ -172,7 +172,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             SetFansColor(new Color(1f, 1f, 1f, 0f));
             SetActiveWithoutRenderer(true);
 
-            Transform.position = NoteHelper.GetTouchAreaPosition(SensorPos);
+            NoteHelper.Sorting.SetPosition(Transform, NoteHelper.GetTouchAreaPosition(SensorPos));
             SetFansPosition(TouchFanStartDistance);
 
             for (var i = 0; i < 4; i++)
@@ -182,7 +182,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             NoteHelper.Sorting.Apply(_pointRenderer, NoteHelper.Sorting.NoteLayer.Touch, SortOrder - _pointBorderSortOrder);
             _borderRenderer.SortingLayerName = "Default";
             _borderRenderer.SortingOrder = 0;
-            NoteHelper.Sorting.SetZPosition(_borderObject.transform, NoteHelper.Sorting.GetZIndex(NoteHelper.Sorting.NoteLayer.TouchHoldBorder, SortOrder - _borderSortOrder));
+            NoteHelper.Sorting.SetLocalZPosition(_borderObject.transform, NoteHelper.Sorting.GetZIndex(NoteHelper.Sorting.NoteLayer.TouchHoldBorder, SortOrder - _borderSortOrder));
 
             State = NoteStatus.Inited;
         }
