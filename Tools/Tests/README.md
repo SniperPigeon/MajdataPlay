@@ -36,3 +36,22 @@ geometry, preventing unbounded mesh allocation for very large tiled sizes.
 Identical settings share immutable meshes. Changing Size can allocate a new mesh;
 continuous size animation is not allocation-free. NoteRenderer keeps its preloaded
 Simple meshes and uses the shared cache for Sliced/Tiled, still ignoring flips.
+
+## CustomSkin Atlas Size Validation
+
+```powershell
+./Tools/Tests/ValidateCustomSkinAtlas.ps1 -UnityPath 'C:/Program Files/Unity Editors/6000.3.17f1/Editor/Unity.exe'
+```
+
+Open the main project in Unity once to compile its package dependencies before running.
+The script stages the current `AtlasBuilder` in `Temp/CustomSkinAtlasValidation` and
+substitutes its texture-size limit to exercise atlas limits of 8192 and 1024 pixels.
+It checks synchronous and asynchronous loading, logical sprite and geometry sizes,
+border sizes, UV bounds, and independent sprites, including rectangular, odd-sized,
+and individually oversized inputs.
+Small differences on the shorter axis are allowed for atlas pixel rounding.
+The isolated harness uses adapters for image decoding, pooling, and logging; Unity
+packing and sprite creation run normally. It does not perform device or screenshot tests.
+The current FullRect sprites log `Not allowed to override geometry`; this existing
+behavior is outside this test's scope. Geometry sizes are compared against actual
+source-resolution sprites rather than assuming alpha outline tessellation succeeded.

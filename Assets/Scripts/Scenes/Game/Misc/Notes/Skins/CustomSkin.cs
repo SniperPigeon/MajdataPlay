@@ -917,9 +917,15 @@ namespace MajdataPlay.Scenes.Game.Notes.Skins
         internal static Sprite CreateOutlinedSprite(Texture2D texture, Rect rect, Texture2D source,
     string name, Vector4 border, float snap, float detail, byte alphaTolerance)
         {
+            // Preserve the source's world size when PackTextures downsizes it.
+            // Use the longer axis to minimize pixel-rounding error on thin textures.
+            var packedScale = source.width >= source.height
+                ? rect.width / source.width
+                : rect.height / source.height;
+            var pixelsPerUnit = 100f * packedScale;
             // Polygon is an editor import mode, not a runtime SpriteMeshType.
             // Tight supplies the initial mesh; OverrideGeometry installs our polygon mesh.
-            var sprite = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), 100f, 0,
+            var sprite = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), pixelsPerUnit, 0,
                 SpriteMeshType.FullRect, border, false);
             try
             {
@@ -1321,7 +1327,25 @@ namespace MajdataPlay.Scenes.Game.Notes.Skins
             var maximumAtlasSize = Math.Min(8192, SystemInfo.maxTextureSize);
             // PackTextures resizes the atlas; avoid allocating the maximum size before packing.
             var atlas = new Texture2D(2, 2);
-            var rects = atlas.PackTextures(textures.ToArray(), 2, maximumAtlasSize);
+            var packingTextures = textures.ToArray();
+            Rect[] rects;
+            try
+            {
+                for (var i = 0; i < packingTextures.Length; i++)
+                    packingTextures[i] = ResizeForAtlas(textures[i], maximumAtlasSize);
+                rects = atlas.PackTextures(packingTextures, 2, maximumAtlasSize);
+            }
+            catch
+            {
+                UnityEngine.Object.DestroyImmediate(atlas, true);
+                throw;
+            }
+            finally
+            {
+                for (var i = 0; i < packingTextures.Length; i++)
+                    if (packingTextures[i] != textures[i])
+                        UnityEngine.Object.DestroyImmediate(packingTextures[i], true);
+            }
 
             // Keep the atlas readable until all Tight sprites and custom meshes exist.
 
@@ -1355,6 +1379,63 @@ namespace MajdataPlay.Scenes.Game.Notes.Skins
             }
 
             return atlas;
+        }
+
+        private static Texture2D ResizeForAtlas(Texture2D source, int maximumSize)
+        {
+            var longestSide = Math.Max(source.width, source.height);
+            if (longestSide <= maximumSize) return source;
+
+            // PackTextures clamps oversized axes independently. Resize uniformly first
+            // so a device's texture limit cannot change the sprite's aspect ratio.
+            var scale = (float)maximumSize / longestSide;
+            var width = Math.Max(1, Mathf.RoundToInt(source.width * scale));
+            var height = Math.Max(1, Mathf.RoundToInt(source.height * scale));
+            var resized = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            try
+            {
+                new ResizeTextureJob
+                {
+                    Source = source.GetPixelData<Color32>(0),
+                    Destination = resized.GetPixelData<Color32>(0),
+                    SourceWidth = source.width,
+                    SourceHeight = source.height,
+                    Width = width,
+                    Height = height
+                }.Schedule(width * height, 64).Complete();
+                resized.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+                return resized;
+            }
+            catch
+            {
+                UnityEngine.Object.DestroyImmediate(resized, true);
+                throw;
+            }
+        }
+
+        [BurstCompile(FloatMode = FloatMode.Strict)]
+        private struct ResizeTextureJob : IJobParallelFor
+        {
+            [ReadOnly] public NativeArray<Color32> Source;
+            [WriteOnly] public NativeArray<Color32> Destination;
+            public int SourceWidth, SourceHeight, Width, Height;
+
+            public void Execute(int index)
+            {
+                var position = (new float2(index % Width, index / Width) + 0.5f)
+                    * new float2((float)SourceWidth / Width, (float)SourceHeight / Height) - 0.5f;
+                var lower = (int2)math.floor(position);
+                var upper = math.min(lower + 1, new int2(SourceWidth - 1, SourceHeight - 1));
+                var fraction = math.frac(position);
+                var bottom = math.lerp(ToFloat(Source[lower.y * SourceWidth + lower.x]),
+                    ToFloat(Source[lower.y * SourceWidth + upper.x]), fraction.x);
+                var top = math.lerp(ToFloat(Source[upper.y * SourceWidth + lower.x]),
+                    ToFloat(Source[upper.y * SourceWidth + upper.x]), fraction.x);
+                var color = math.round(math.lerp(bottom, top, fraction.y));
+                Destination[index] = new Color32((byte)color.x, (byte)color.y, (byte)color.z, (byte)color.w);
+            }
+
+            private static float4 ToFloat(Color32 color) => new float4(color.r, color.g, color.b, color.a);
         }
     }
 }
