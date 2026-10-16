@@ -164,6 +164,16 @@ internal static unsafe class ConversionThreadChecks
                     }
                 }
 
+                // Quarter turns band output rows, which are source columns, so wide short frames
+                // give every thread at least 64 rotated rows and an uneven last band.
+                foreach (var width in s_heights)
+                {
+                    foreach (var height in new[] { 1, 2, 3, 15, 16, 17, 33, 65 })
+                    {
+                        comparisons += CompareThreads(converters, format, width, height);
+                    }
+                }
+
                 // A wide frame exercises full SIMD rows and the vertical-chroma path on every thread.
                 comparisons += CompareThreads(converters, format, 1920, 1081);
             }
@@ -210,7 +220,9 @@ internal static unsafe class ConversionThreadChecks
                             var converter = converters[threads];
                             using (var result = converter.Convert(frame, 0, 0.04, turn * 90, int.MaxValue / 4))
                             {
-                                if (converter.ScaleThreadCount != threads || converter.CopyBandCount < 2)
+                                // Bands partition output rows: source rows unrotated, source columns for quarter turns.
+                                var outputRows = (turn & 1) == 0 ? height : width;
+                                if (converter.ScaleThreadCount != threads || converter.CopyBandCount < Math.Min(2, outputRows / 64))
                                 {
                                     Check(false, threads + " conversion threads used " + converter.ScaleThreadCount
                                         + " libswscale threads and " + converter.CopyBandCount + " copy bands for "

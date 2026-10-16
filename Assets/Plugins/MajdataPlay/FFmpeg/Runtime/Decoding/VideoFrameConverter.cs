@@ -17,6 +17,10 @@ namespace MajdataPlay.FFmpeg.Internal
         private const int MinimumBandRows = 64;
         /// <summary>Aligns copy band boundaries to multiples of this many source rows.</summary>
         private const int BandRowAlignment = 16;
+        /// <summary>Sets the number of source rows in one quarter-turn copy tile, which become contiguous output pixels.</summary>
+        private const int RotationTileRows = 32;
+        /// <summary>Sets the number of source columns in one quarter-turn copy tile, which become separate output rows.</summary>
+        private const int RotationTileColumns = 32;
         /// <summary>Owns the cached single-call scaling context used when slice conversion is unavailable.</summary>
         private SwsContext* _scale;
         /// <summary>Owns the explicitly initialized, optionally slice-threaded libswscale context.</summary>
@@ -372,26 +376,31 @@ namespace MajdataPlay.FFmpeg.Internal
             ScaleThreadCount = 0;
         }
 
-        /// <summary>Copies the RGBA staging frame into tightly packed output, in row bands when threads are available.</summary>
+        /// <summary>Copies the RGBA staging frame into tightly packed output, in output-row bands when threads are available.</summary>
         /// <param name="destination">The writable RGBA output buffer owned by the caller.</param>
         /// <param name="width">The source frame width in pixels.</param>
         /// <param name="height">The source frame height in pixels.</param>
         /// <param name="turns">The clockwise rotation in quarter turns.</param>
+        /// <remarks>
+        /// Bands partition output rows, so each thread writes whole rows: source rows for 0 and 180 degrees, and source
+        /// columns for 90 and 270 degrees. Writing whole rows avoids sharing output cache lines between threads.
+        /// </remarks>
         /// <exception cref="Exception">A copy band failed; it is rethrown after every band has completed.</exception>
         private void CopyToOutput(uint* destination, int width, int height, int turns)
         {
             var source = _rgba->data[0];
             var sourceStride = _rgba->linesize[0];
-            var bandCount = Math.Min(_threadCount, height / MinimumBandRows);
+            var outputRows = (turns & 1) == 0 ? height : width;
+            var bandCount = Math.Min(_threadCount, outputRows / MinimumBandRows);
             if (bandCount <= 1 || _bandExecutor == null || _copyJob == null)
             {
                 CopyBandCount = 1;
-                CopyRows(source, sourceStride, destination, width, height, turns, 0, height);
+                CopyLines(source, sourceStride, destination, width, height, turns, 0, outputRows);
                 return;
             }
 
-            var bandRows = (((height + bandCount - 1) / bandCount) + BandRowAlignment - 1) / BandRowAlignment * BandRowAlignment;
-            bandCount = (height + bandRows - 1) / bandRows;
+            var bandRows = (((outputRows + bandCount - 1) / bandCount) + BandRowAlignment - 1) / BandRowAlignment * BandRowAlignment;
+            bandCount = (outputRows + bandRows - 1) / bandRows;
             CopyBandCount = bandCount;
             _copyJob.Configure(source, sourceStride, destination, width, height, turns, bandRows);
             try
@@ -459,37 +468,34 @@ namespace MajdataPlay.FFmpeg.Internal
         }
 
         // Source coordinates are top-down; destination indexing incorporates Unity's Y flip.
-        /// <summary>Copies a range of source rows through a quarter-turn rotation and Unity's vertical coordinate flip.</summary>
+        /// <summary>Copies a range of source lines through a quarter-turn rotation and Unity's vertical coordinate flip.</summary>
         /// <param name="source">The borrowed top-down RGBA staging pixels.</param>
         /// <param name="sourceStride">The source row stride in bytes.</param>
         /// <param name="destination">The writable, tightly packed RGBA output buffer owned by the caller.</param>
         /// <param name="width">The source frame width in pixels.</param>
         /// <param name="height">The source frame height in pixels.</param>
         /// <param name="turns">The clockwise rotation in quarter turns.</param>
-        /// <param name="firstRow">The first source row to copy.</param>
-        /// <param name="endRow">The source row after the last row to copy.</param>
-        /// <remarks>Distinct row ranges write disjoint output pixels, so bands may run concurrently.</remarks>
-        private static void CopyRows(byte* source, int sourceStride, uint* destination, int width, int height, int turns,
-            int firstRow, int endRow)
+        /// <param name="firstLine">The first source row (0 or 180 degrees) or source column (90 or 270 degrees) to copy.</param>
+        /// <param name="endLine">The source row or column after the last one to copy.</param>
+        /// <remarks>Each source line becomes one whole output row, so distinct line ranges may be copied concurrently.</remarks>
+        private static void CopyLines(byte* source, int sourceStride, uint* destination, int width, int height, int turns,
+            int firstLine, int endLine)
         {
+            if ((turns & 1) != 0)
+            {
+                TransposeColumns(source, sourceStride, destination, width, height, turns, firstLine, endLine);
+                return;
+            }
+
             var rowBytes = width * 4;
-            for (var y = firstRow; y < endRow; y++)
+            for (var y = firstLine; y < endLine; y++)
             {
                 var row = (uint*)(source + ((long)y * sourceStride));
                 if (turns == 0)
                 {
                     Buffer.MemoryCopy(row, destination + ((long)(height - 1 - y) * width), rowBytes, rowBytes);
                 }
-                else if (turns == 1)
-                {
-                    // The output is height pixels wide; source column x lands on output row (width - 1 - x).
-                    var target = destination + ((long)(width - 1) * height) + (height - 1 - y);
-                    for (var x = 0; x < width; x++)
-                    {
-                        target[-(long)x * height] = row[x];
-                    }
-                }
-                else if (turns == 2)
+                else
                 {
                     var target = destination + ((long)y * width) + (width - 1);
                     for (var x = 0; x < width; x++)
@@ -497,12 +503,51 @@ namespace MajdataPlay.FFmpeg.Internal
                         target[-x] = row[x];
                     }
                 }
-                else
+            }
+        }
+
+        /// <summary>Copies a range of source columns through a 90 or 270 degree turn and Unity's vertical flip in cache-sized tiles.</summary>
+        /// <param name="source">The borrowed top-down RGBA staging pixels.</param>
+        /// <param name="sourceStride">The source row stride in bytes.</param>
+        /// <param name="destination">The writable, tightly packed RGBA output buffer owned by the caller.</param>
+        /// <param name="width">The source frame width in pixels.</param>
+        /// <param name="height">The source frame height in pixels.</param>
+        /// <param name="turns">The clockwise rotation in quarter turns, either 1 or 3.</param>
+        /// <param name="firstColumn">The first source column to copy.</param>
+        /// <param name="endColumn">The source column after the last column to copy.</param>
+        /// <remarks>
+        /// Each source column becomes one output row. A tile reads a few cache lines from each of its source rows and
+        /// writes a contiguous run of every covered output row, instead of one pixel per output row per source row.
+        /// </remarks>
+        private static void TransposeColumns(byte* source, int sourceStride, uint* destination, int width, int height,
+            int turns, int firstColumn, int endColumn)
+        {
+            for (var tileRow = 0; tileRow < height; tileRow += RotationTileRows)
+            {
+                var tileRowEnd = Math.Min(height, tileRow + RotationTileRows);
+                for (var tileColumn = firstColumn; tileColumn < endColumn; tileColumn += RotationTileColumns)
                 {
-                    var target = destination + y;
-                    for (var x = 0; x < width; x++)
+                    var tileColumnEnd = Math.Min(endColumn, tileColumn + RotationTileColumns);
+                    for (var x = tileColumn; x < tileColumnEnd; x++)
                     {
-                        target[(long)x * height] = row[x];
+                        var column = source + ((long)x * 4);
+                        if (turns == 1)
+                        {
+                            // The output is height pixels wide; source column x lands on output row (width - 1 - x).
+                            var target = destination + ((long)(width - 1 - x) * height) + (height - 1);
+                            for (var y = tileRow; y < tileRowEnd; y++)
+                            {
+                                target[-y] = *(uint*)(column + ((long)y * sourceStride));
+                            }
+                        }
+                        else
+                        {
+                            var target = destination + ((long)x * height);
+                            for (var y = tileRow; y < tileRowEnd; y++)
+                            {
+                                target[y] = *(uint*)(column + ((long)y * sourceStride));
+                            }
+                        }
                     }
                 }
             }
@@ -524,7 +569,7 @@ namespace MajdataPlay.FFmpeg.Internal
             private int _height;
             /// <summary>Stores the clockwise rotation in quarter turns.</summary>
             private int _turns;
-            /// <summary>Stores the number of source rows in each band except possibly the last.</summary>
+            /// <summary>Stores the number of output rows in each band except possibly the last.</summary>
             private int _bandRows;
 
             /// <summary>Configures the copy that subsequent band executions perform.</summary>
@@ -534,7 +579,7 @@ namespace MajdataPlay.FFmpeg.Internal
             /// <param name="width">The source frame width in pixels.</param>
             /// <param name="height">The source frame height in pixels.</param>
             /// <param name="turns">The clockwise rotation in quarter turns.</param>
-            /// <param name="bandRows">The number of source rows in each band, a multiple of 16.</param>
+            /// <param name="bandRows">The number of output rows in each band, a multiple of 16.</param>
             internal void Configure(byte* source, int sourceStride, uint* destination, int width, int height, int turns,
                 int bandRows)
             {
@@ -554,13 +599,13 @@ namespace MajdataPlay.FFmpeg.Internal
                 _destination = null;
             }
 
-            /// <summary>Copies the source rows that belong to one band.</summary>
+            /// <summary>Copies the source lines that produce the output rows of one band.</summary>
             /// <param name="band">The zero-based band index.</param>
             public void Execute(int band)
             {
-                var firstRow = band * _bandRows;
-                var endRow = Math.Min(_height, firstRow + _bandRows);
-                CopyRows(_source, _sourceStride, _destination, _width, _height, _turns, firstRow, endRow);
+                var firstLine = band * _bandRows;
+                var endLine = Math.Min((_turns & 1) == 0 ? _height : _width, firstLine + _bandRows);
+                CopyLines(_source, _sourceStride, _destination, _width, _height, _turns, firstLine, endLine);
             }
         }
 

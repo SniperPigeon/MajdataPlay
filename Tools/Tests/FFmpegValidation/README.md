@@ -234,16 +234,16 @@ dotnet run --project Tools/Tests/FFmpegValidation/FFmpegValidation.csproj -- `
   "Assets/StreamingAssets/MaiCharts/Original/Zunda Overdance/bg.mp4" --conversion-threads
 ```
 
-CPU 上传路径的 `VideoFrameConverter` 用 `sws_alloc_context` 设置 `SwsContext` 的尺寸、格式、range、`flags` 与 `threads` 后 `sws_init_context`，再以 `sws_frame_start` + `sws_send_slice(0, 高)` + `sws_receive_slice(0, 高)` + `sws_frame_end` 让 libswscale 按 slice 多线程转换到 64 字节对齐的 RGBA staging 帧；任一步失败时释放上下文、本帧回退到原单次 `sws_scale`，下一帧重建上下文，同一尺寸/格式再次失败则持续回退直到尺寸或格式变化。之后的垂直翻转或四分之一旋转复制按 16 行对齐的行带分给首次多带转换时才创建的后台线程（`FFmpeg Video Band N`），调用线程也参与，并等待所有已领取的行带完成后才返回或重抛异常。线程数由 `DecoderOptions.ConversionThreadCount` 决定（包含解码 worker，钳制到 1–16）：默认在逻辑处理器不超过 4 个时为 1，否则为 `clamp(处理器数 - 2, 1, 4)`，与 codec 的 `ThreadCount = min(处理器数, 8)` 共存；libswscale 与复制两阶段先后执行，不同时占用。`DecodedVideoFrame.CopyToSoftware` 仍为单线程。
+CPU 上传路径的 `VideoFrameConverter` 用 `sws_alloc_context` 设置 `SwsContext` 的尺寸、格式、range、`flags` 与 `threads` 后 `sws_init_context`，再以 `sws_frame_start` + `sws_send_slice(0, 高)` + `sws_receive_slice(0, 高)` + `sws_frame_end` 让 libswscale 按 slice 多线程转换到 64 字节对齐的 RGBA staging 帧；任一步失败时释放上下文、本帧回退到原单次 `sws_scale`，下一帧重建上下文，同一尺寸/格式再次失败则持续回退直到尺寸或格式变化。之后的垂直翻转或四分之一旋转复制按 16 行对齐的输出行带（0°/180° 为源行，90°/270° 为源列）分给首次多带转换时才创建的后台线程，每个线程只写完整的输出行；90°/270° 在行带内按 32×32 像素块转置，使连续源行写入同一输出行的连续像素（`FFmpeg Video Band N`），调用线程也参与，并等待所有已领取的行带完成后才返回或重抛异常。线程数由 `DecoderOptions.ConversionThreadCount` 决定（包含解码 worker，钳制到 1–16）：默认在逻辑处理器不超过 4 个时为 1，否则为 `clamp(处理器数 - 2, 1, 4)`，与 codec 的 `ThreadCount = min(处理器数, 8)` 共存；libswscale 与复制两阶段先后执行，不同时占用。`DecodedVideoFrame.CopyToSoftware` 仍为单线程。
 
 此模式不需要 GPU，检查内容：
 - 行带执行器：20000 次交替发布两个不同 job、2–24 个行带，每个行带只属于当前 job 且恰好执行一次，返回前全部完成；失败的行带在所有已领取行带完成后重抛，之后执行器仍可用；单行带内联运行不建线程，多行带后才启动线程；Dispose 后拒绝新 job。
-- 逐字节一致：`yuv420p`、`yuv420p10le`、`nv12`、`p010le`、`yuv444p`，高度 513/1079/1081（每线程至少 64 行且最后一带不均匀）、宽度 1–65 与 1920，luma 横向渐变、chroma 纵向渐变，limited/full 两种 range、0/90/180/270 四种旋转；2–8 个线程（含奇数）的输出与 1 线程逐字节相同，并通过初始化后的 `SwsContext.threads` 断言 libswscale 实际使用 N 个线程、复制至少使用 2 个行带；抽样宽度另与独立的单次 `sws_scale` 结果逐像素比对方向与颜色。
+- 逐字节一致：`yuv420p`、`yuv420p10le`、`nv12`、`p010le`、`yuv444p`，高度 513/1079/1081（每线程至少 64 行且最后一带不均匀）与宽度 1–65、宽度 513/1079/1081 与高度 1/2/3/15/16/17/33/65（旋转后的行带同样不均匀），以及 1920×1081，luma 横向渐变、chroma 纵向渐变，limited/full 两种 range、0/90/180/270 四种旋转；2–8 个线程（含奇数）的输出与 1 线程逐字节相同，并通过初始化后的 `SwsContext.threads` 断言 libswscale 实际使用 N 个线程、输出行不少于 128 时复制至少使用 2 个行带；抽样宽度另与独立的单次 `sws_scale` 结果逐像素比对方向与颜色。
 - 分配：用 `GC.GetTotalAllocatedBytes(precise: true)` 统计包括行带线程在内的整个进程，4 线程转换 1280×721 的 `yuv420p`/`nv12`/`p010le` 帧，预热后 256 帧的托管分配为 **0 B**（`--allocations` 与 `--allocations-software` 也运行此项）。
 - 解码器：`ConversionThreadCount = 1` 与 `4` 的软件解码器对真实素材前 24 帧输出相同像素，实际 libswscale 线程数分别为 1 与 4；0、负数和 64 被钳制到 1–16。
 - 输出 1080p 与 4K 的 `yuv420p`、`nv12` 在 0°/90° 下 1/2/4/8 线程的每帧耗时，仅供参考，不作为断言。
 
-Windows x64 Release 参考结果（16 逻辑处理器，默认 4 线程）：1080p `yuv420p` 每帧约 5.3 ms → 2.4 ms，`nv12` 约 9.8 ms → 4.0 ms；4K `yuv420p` 约 20.7 ms → 11.4 ms，`nv12` 约 39.8 ms → 17.4 ms。90° 旋转的复制按列写入，受内存带宽限制，加速有限。
+Windows x64 Release 参考结果（16 逻辑处理器，默认 4 线程）：1080p `yuv420p` 每帧约 5.3 ms → 2.4 ms，`nv12` 约 9.8 ms → 4.0 ms；4K `yuv420p` 约 20.7 ms → 11.4 ms，`nv12` 约 39.8 ms → 17.4 ms。90° 旋转在默认 4 线程下：1080p `yuv420p` 约 6.0 ms → 4.2 ms，`nv12` 约 8.1 ms → 5.7 ms；4K `yuv420p` 约 21.3 ms → 17.0 ms，`nv12` 约 30.9 ms → 20.9 ms（与按源行分带、逐像素列写的上一实现交替运行两次的平均值；本机波动约 ±15%）。
 
 此 .NET 9 检查只覆盖 Windows x64 原生库与 CoreCLR；Android、iOS、macOS、Linux 以及 Unity Mono/IL2CPP Player 中的线程行为、分配与耗时未验证，需要按下文 Player 流程另行确认。
 
