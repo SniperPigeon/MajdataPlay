@@ -49,6 +49,8 @@ substitutes its texture-size limit to exercise atlas limits of 8192 and 1024 pix
 It checks synchronous and asynchronous loading, logical sprite and geometry sizes,
 border sizes, UV bounds, and independent sprites, including rectangular, odd-sized,
 and individually oversized inputs.
+When an input exceeds the limit, it also verifies that all atlas inputs share
+the same resize ratio, including images that already fit the limit.
 Small differences on the shorter axis are allowed for atlas pixel rounding.
 The isolated harness uses adapters for image decoding, pooling, and logging; Unity
 packing and sprite creation run normally. It does not perform device or screenshot tests.

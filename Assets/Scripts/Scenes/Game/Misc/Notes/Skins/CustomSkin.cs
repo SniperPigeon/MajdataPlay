@@ -1325,6 +1325,11 @@ namespace MajdataPlay.Scenes.Game.Notes.Skins
             }
 
             var maximumAtlasSize = Math.Min(8192, SystemInfo.maxTextureSize);
+            var longestSide = maximumAtlasSize;
+            foreach (var texture in textures)
+                longestSide = Math.Max(longestSide, Math.Max(texture.width, texture.height));
+            // If any input exceeds the limit, resize the entire set by the same ratio.
+            var resizeScale = (float)maximumAtlasSize / longestSide;
             // PackTextures resizes the atlas; avoid allocating the maximum size before packing.
             var atlas = new Texture2D(2, 2);
             var packingTextures = textures.ToArray();
@@ -1332,7 +1337,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Skins
             try
             {
                 for (var i = 0; i < packingTextures.Length; i++)
-                    packingTextures[i] = ResizeForAtlas(textures[i], maximumAtlasSize);
+                    packingTextures[i] = ResizeForAtlas(textures[i], resizeScale);
                 rects = atlas.PackTextures(packingTextures, 2, maximumAtlasSize);
             }
             catch
@@ -1381,16 +1386,15 @@ namespace MajdataPlay.Scenes.Game.Notes.Skins
             return atlas;
         }
 
-        private static Texture2D ResizeForAtlas(Texture2D source, int maximumSize)
+        private static Texture2D ResizeForAtlas(Texture2D source, float scale)
         {
-            var longestSide = Math.Max(source.width, source.height);
-            if (longestSide <= maximumSize) return source;
+            if (scale >= 1f) return source;
 
             // PackTextures clamps oversized axes independently. Resize uniformly first
             // so a device's texture limit cannot change the sprite's aspect ratio.
-            var scale = (float)maximumSize / longestSide;
             var width = Math.Max(1, Mathf.RoundToInt(source.width * scale));
             var height = Math.Max(1, Mathf.RoundToInt(source.height * scale));
+            if (width == source.width && height == source.height) return source;
             var resized = new Texture2D(width, height, TextureFormat.RGBA32, false);
             try
             {

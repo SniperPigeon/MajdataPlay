@@ -46,7 +46,7 @@ public static class CustomSkinAtlasValidation
             Inputs = new[]
             {
                 new Input(2048, 1024, new Rect(256, 128, 1280, 640), Vector4.zero),
-                new Input(1025, 768, new Rect(0, 0, 1025, 768), new Vector4(20, 10, 24, 12)),
+                new Input(513, 384, new Rect(0, 0, 513, 384), new Vector4(20, 10, 24, 12)),
                 new Input(1025, 257, new Rect(0, 0, 1025, 257), new Vector4(20, 1, 24, 1)),
                 new Input(257, 1025, new Rect(0, 0, 257, 1025), new Vector4(1, 20, 1, 24))
             };
@@ -90,12 +90,12 @@ public static class CustomSkinAtlasValidation
         {
             var resize = typeof(AtlasBuilder).GetMethod("ResizeForAtlas",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            resized = (Texture2D)resize.Invoke(null, new object[] { source, 2 });
+            resized = (Texture2D)resize.Invoke(null, new object[] { source, 0.5f });
             Check(resized.width == 2 && resized.height == 1, "Uniform resize dimensions");
             var pixels = resized.GetPixels32();
             Check(pixels[0].Equals(new Color32(150, 60, 20, 96)) &&
                 pixels[1].Equals(new Color32(20, 90, 160, 191)), "Bilinear RGBA interpolation");
-            Check(ReferenceEquals(source, resize.Invoke(null, new object[] { source, 4 })), "Fitting texture reused");
+            Check(ReferenceEquals(source, resize.Invoke(null, new object[] { source, 1f })), "Full resolution texture reused");
             Check(source.width == 4 && source.height == 2 && source.GetPixels32()[0].Equals(a), "Original pixels preserved");
         }
         finally
@@ -129,6 +129,14 @@ public static class CustomSkinAtlasValidation
                 ValidateSprite(sprite, Inputs[i], ReferenceBounds[i], limit == 8192 ? 0.0001f : 1f / sprite.pixelsPerUnit + 0.0001f);
                 if (limit == 8192) Near(sprite.pixelsPerUnit, 100f, 0.0001f, "Full resolution PPU");
                 else Check(sprite.pixelsPerUnit < 100f, "Forced limit actually downscales input");
+            }
+            var referenceEdge = Mathf.Max(Inputs[0].Width, Inputs[0].Height);
+            for (var i = 1; i < sprites.Length; i++)
+            {
+                var sourceEdge = Mathf.Max(Inputs[i].Width, Inputs[i].Height);
+                var roundingTolerance = 100f / referenceEdge + 100f / sourceEdge + 0.0001f;
+                Near(sprites[i].pixelsPerUnit, sprites[0].pixelsPerUnit, roundingTolerance,
+                    "All atlas inputs share the same resolution scale, input " + i);
             }
             Check(!atlas.isReadable, "Atlas releases CPU pixels after generating outlines");
             Debug.Log($"Atlas {atlas.width}x{atlas.height}, limit {limit}, async {asynchronous}: size, geometry, borders and UV passed");
