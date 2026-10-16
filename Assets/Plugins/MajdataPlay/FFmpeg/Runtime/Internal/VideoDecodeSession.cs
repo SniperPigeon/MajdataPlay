@@ -23,6 +23,10 @@ namespace MajdataPlay.FFmpeg.Internal
         public readonly string DecoderDevice, TransferMode;
         /// <summary>Identifies the hardware backend active when this snapshot was captured.</summary>
         public readonly global::FFmpeg.AutoGen.AVHWDeviceType HardwareDeviceType;
+        /// <summary>Stores the number of threads used by the opened codec.</summary>
+        public readonly int DecoderThreadCount;
+        /// <summary>Describes how the opened codec parallelizes decoding: frame, slice, codec, or none.</summary>
+        public readonly string DecoderThreadingMode;
         /// <summary>Captures immutable media and transport information from an open decoder.</summary>
         /// <param name="decoder">The open worker-owned decoder whose metadata is captured.</param>
         public VideoInfo(FFmpegVideoDecoder decoder)
@@ -41,6 +45,8 @@ namespace MajdataPlay.FFmpeg.Internal
             HardwareDecoding = decoder.HardwareDecoding;
             TransferMode = decoder.TransferMode;
             HardwareDeviceType = decoder.ActiveHardwareDeviceType;
+            DecoderThreadCount = decoder.DecoderThreadCount;
+            DecoderThreadingMode = decoder.DecoderThreadingMode;
         }
     }
 
@@ -315,7 +321,8 @@ namespace MajdataPlay.FFmpeg.Internal
                     }
 
                     MajDebug.LogInfo("FFmpeg", "[Session] Media ready; codec=" + decoder.CodecName
-                        + ", decoder=" + decoder.DecoderName + ", device=" + decoder.DecoderDevice + ".");
+                        + ", decoder=" + decoder.DecoderName + ", device=" + decoder.DecoderDevice
+                        + ", threads=" + decoder.DecoderThreadCount + " (" + decoder.DecoderThreadingMode + ").");
                     long decodedRevision = 0;
                     while (true)
                     {
@@ -365,7 +372,7 @@ namespace MajdataPlay.FFmpeg.Internal
                                 if (_info.Width != decoder.Width || _info.Height != decoder.Height
                                     || _info.HardwareFallbackReason != decoder.HardwareFallbackReason || _info.HardwareDecoding != decoder.HardwareDecoding
                                     || _info.DecoderName != decoder.DecoderName || _info.DecoderDevice != decoder.DecoderDevice
-                                    || _info.TransferMode != decoder.TransferMode)
+                                    || _info.TransferMode != decoder.TransferMode || _info.DecoderThreadCount != decoder.DecoderThreadCount)
                                 {
                                     _info = new VideoInfo(decoder);
                                 }

@@ -48,6 +48,7 @@ namespace MajdataPlay.FFmpeg.Editor
             EditorGUILayout.LabelField("Encoding", player.CodecName);
             EditorGUILayout.LabelField("Decoder", player.DecoderName + " (" + player.DecoderType + ")");
             EditorGUILayout.LabelField("Decode device", player.DecoderDevice);
+            EditorGUILayout.LabelField("Decoder threads", player.DecoderThreadCount + " (" + player.DecoderThreadingMode + ")");
             EditorGUILayout.LabelField("Texture transfer", player.TransferMode);
             EditorGUILayout.LabelField("Video", $"{player.Width} x {player.Height}, {player.FrameRate:F3} fps");
             EditorGUILayout.LabelField("Bitrate (current)", FormatBitRate(player.CurrentBitRate));

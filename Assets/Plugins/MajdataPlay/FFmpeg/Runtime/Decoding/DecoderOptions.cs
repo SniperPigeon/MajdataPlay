@@ -14,7 +14,12 @@ namespace MajdataPlay.FFmpeg.Internal
         /// <summary>Gets or sets the maximum number of pixels in a decoded frame.</summary>
         /// <remarks>The value must be positive and no greater than <see cref="int.MaxValue"/> divided by four.</remarks>
         public int MaximumPixelCount { get; set; } = 4096 * 4096;
-        /// <summary>Gets or sets the requested decoder thread count, which is clamped to the range 1 through 16.</summary>
+        /// <summary>Gets or sets the requested codec thread count for software decoding, which is clamped to the range 1 through 16.</summary>
+        /// <remarks>
+        /// Software decoders and hardware decoders with CPU upload use this many codec threads. Native GPU frame transport that
+        /// relies on worker-side completion markers runs the codec on one thread; when such a codec rejects the hardware pixel
+        /// format, the decoder reopens a software decoder with this thread count instead of decoding single-threaded.
+        /// </remarks>
         public int ThreadCount { get; set; } = Math.Min(Environment.ProcessorCount, 8);
         /// <summary>Gets or sets whether hardware frames should retain native GPU resources for presentation.</summary>
         /// <remarks>When disabled, hardware frames are downloaded or obtained as CPU pixels for RGBA upload.</remarks>

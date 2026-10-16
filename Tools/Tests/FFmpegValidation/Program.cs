@@ -30,6 +30,7 @@ static class Program
             var nativeContent = args.Length == 2 && args[1] == "--native-content";
             var eviction = args.Length == 3 && args[2] == "--eviction";
             var decodeSynchronization = args.Length == 3 && args[2] == "--decode-sync";
+            var hardwareRejected = args.Length == 3 && args[2] == "--hardware-rejected";
             bool av1 = args.Length == 3 && args[2] == "--av1";
             bool av1Unavailable = args.Length == 3 && args[2] == "--av1-unavailable";
             bool allocations = args.Length == 3 && args[2] == "--allocations";
@@ -41,9 +42,9 @@ static class Program
             var encodingSoftware = args.Length == 3 && args[2] == "--encode-software";
             if (args.Length != 2 && !av1 && !av1Unavailable && !allocations && !softwareAllocations
                 && !encoding && !encodingUnavailable && !encodingHardware && !uncheckedAmf && !encodingSoftware
-                && !eviction && !decodeSynchronization)
+                && !eviction && !decodeSynchronization && !hardwareRejected)
             {
-                Console.WriteLine("PASS: " + _checks + " assertions; clock, bitrate, frame pool, encoder options and opaque content normalization; use <native-directory> --native-content for Windows protocol checks, <native-directory> <media> [--av1|--av1-unavailable|--allocations|--allocations-software|--eviction|--decode-sync], or <native-directory> <output-directory> --encode[|-unavailable|-hardware|-unchecked-amf|-software].");
+                Console.WriteLine("PASS: " + _checks + " assertions; clock, bitrate, frame pool, encoder options and opaque content normalization; use <native-directory> --native-content for Windows protocol checks, <native-directory> <media> [--av1|--av1-unavailable|--allocations|--allocations-software|--eviction|--decode-sync|--hardware-rejected], or <native-directory> <output-directory> --encode[|-unavailable|-hardware|-unchecked-amf|-software].");
                 return 0;
             }
             string native = Path.GetFullPath(args[0]);
@@ -100,6 +101,12 @@ static class Program
             {
                 _checks += FrameEvictionChecks.RunDecodeSynchronization(Path.GetFullPath(args[1]));
                 Console.WriteLine("PASS: " + _checks + " assertions; D3D11VA worker admission, native frame pixels, seek, cancellation and device ownership.");
+                return 0;
+            }
+            if (hardwareRejected)
+            {
+                _checks += HardwareRejectionChecks.RunNative(Path.GetFullPath(args[1]));
+                Console.WriteLine("PASS: " + _checks + " assertions; multi-threaded software decoding after D3D11VA rejection, single-thread configuration, CPU-upload threads, strict and fallback rejection.");
                 return 0;
             }
             if (av1)
@@ -163,6 +170,11 @@ static class Program
         {
             decoder.Open(media, CancellationToken.None);
             Check(!decoder.HardwareDecoding && !string.IsNullOrEmpty(decoder.DecoderName), "default CPU decoder reports software identity");
+            // H.264 uses frame threads; libdav1d/libaom report library-managed "codec" threads.
+            int expectedThreads = Math.Max(1, Math.Min(Environment.ProcessorCount, 8));
+            Check(decoder.DecoderThreadCount == 1 ? decoder.DecoderThreadingMode == "none"
+                : decoder.DecoderThreadCount == expectedThreads && decoder.DecoderThreadingMode != "none",
+                "default CPU decoder uses the configured codec threads: " + decoder.DecoderThreadCount + " (" + decoder.DecoderThreadingMode + ")");
             Check(decoder.Width > 0 && decoder.Height > 0 && decoder.Duration > 0, "metadata");
             Console.WriteLine($"{decoder.CodecName}: {decoder.Width}x{decoder.Height}, {decoder.Duration:F3}s, {decoder.FrameRate:F3}fps");
             double previous = -1;

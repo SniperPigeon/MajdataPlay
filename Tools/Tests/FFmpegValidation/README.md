@@ -209,6 +209,23 @@ dotnet run --project Tools/Tests/FFmpegValidation/FFmpegValidation.csproj -- `
 
 使用可 seek、长于 2 秒且帧率不低于 24 FPS 的真实素材。容量 1/3/8 的会话覆盖有界预载、不取帧时后台自动追赶与定时唤醒、预配置倍速、共享时钟的时间连续性、暂停与关闭时冻结时间、seek 立即设置目标时间、保留未来帧、连续 seek、持有呈现帧时的池容量与关闭资源归还；EOF 检查保留最后一帧直到呈现并支持回零。测试使用真实 FFmpeg 解码，`--eviction` 不要求硬件后端，也不代表 Unity 呈现或实机验证。默认真实解码模式同样运行这些检查。
 
+### 硬件拒绝后的多线程软件解码
+
+```powershell
+# 生成 D3D11VA 没有解码 profile 的 H.264 High 4:4:4 Predictive 素材（需要 ffmpeg CLI 含 libx264）。
+ffmpeg -f lavfi -i "testsrc2=size=320x240:rate=30" -t 3 -c:v libx264 -pix_fmt yuv444p -g 15 -bf 2 `
+  Tools/Tests/FFmpegValidation/.work/h264-yuv444p.mp4
+dotnet run --project Tools/Tests/FFmpegValidation/FFmpegValidation.csproj -- `
+  Assets/Plugins/MajdataPlay/FFmpeg/Native/Windows/x86_64 `
+  Tools/Tests/FFmpegValidation/.work/h264-yuv444p.mp4 --hardware-rejected
+```
+
+Windows D3D11 原生纹理路径为了让 worker 侧 GPU 完成标记覆盖每次提交，会把 codec 固定为单线程。GPU 不支持的码流（如 H.264 4:4:4 / 10-bit、缺少对应解码单元的 VP9/AV1/HEVC）在 `get_format` 中拿不到硬件像素格式时，解码器必须以配置的 `ThreadCount` 重新打开软件解码器，而不是继续在单线程 codec 上软解。此模式需要实际 D3D11VA GPU 与包含 GPU 完成查询和 D3D11 staging mapper 的 `FFmpegUnityBridge`；素材必须可 seek、至少 2 秒、恒定帧率且容器时长精确（帧数检查按 `round(duration × fps)` 计算，请使用上面的生成命令），并且 D3D11VA 无法解码。用可硬解的素材运行会在首帧的前置条件检查处明确失败，不能记作通过。
+
+检查内容：纯软件解码器按 `ThreadCount` 报告 frame 线程并完整输出全部帧；强制单线程的同步 codec（分别只带 GPU 同步，以及同时带生产 D3D11 frame mapper；当前进程无法创建独立 GPU staging 时 mapper 变体输出 `SKIP` 并说明原因，不能记作通过）被拒绝后重新打开为 4 线程软件解码器，首帧仍从码流起点开始、帧数与 `duration × fps` 一致、`HardwareFallbackReason` 记录 reopen、GPU 同步对象与 mapper 随旧 codec 释放、seek 仍可用、关闭后设备引用归还；`ThreadCount = 1` 的配置保持原有的同上下文软件回退而不重开；D3D11VA CPU 上传配置本来就保留多线程 codec，不重开；`RequireHardwareDecoding` 与配置了 `FallbackHardwareOptions` 的会话以 `NotSupportedException` 报告拒绝原因，交由播放器选择下一传输方式，不在解码器内重开。默认真实解码模式另断言默认软件解码器报告 `min(处理器数, 8)` 个线程且线程模式不为 none（H.264 为 frame，libdav1d 为 codec）。
+
+此 .NET 9 检查不启动 Unity，也不覆盖 D3D12/Vulkan 渲染器下先经 `FallbackHardwareOptions` 多次重开再到软解的播放器链路，也不覆盖码流中途更换参数集被拒绝的情形（该情形会丢弃旧 codec 中尚未输出的重排帧）；Unity Player 与移动平台的实际表现仍需按下文 Player 流程验证。
+
 ### Camera 录制的托管与真实编码验证
 
 不带参数的默认测试还验证 `EncoderOptions` 的尺寸、帧率、最大软件线程数、目标/最大码率和枚举边界，以及构造时的设置快照。编译 Camera 组件需主项目已用指定 Unity Editor 完成导入，以提供 `Library/ScriptAssemblies` 中的 `Unity.Collections` 与 `Unity.RenderPipelines.Core.Runtime`；测试只引用这些程序集，不调用 Unity 的 Camera 或 GPU API。

@@ -106,6 +106,13 @@ namespace MajdataPlay.FFmpeg.Internal
         private double _catchUpTarget = double.NegativeInfinity;
         /// <summary>Tracks whether the codec currently skips non-reference frames to recover decode throughput.</summary>
         private bool _skippingNonReferenceFrames;
+        /// <summary>Indicates that the codec runs on one thread so worker-side GPU completion markers cover every submission.</summary>
+        /// <remarks>Accessed only on the owning worker; a single codec thread invokes pixel-format selection synchronously.</remarks>
+        private bool _gpuSynchronizedCodec;
+        /// <summary>Indicates that pixel-format selection rejected the hardware format without choosing a software alternative.</summary>
+        private bool _hardwareFormatRejected;
+        /// <summary>Requests replacing the GPU-synchronized codec with a multi-threaded software decoder before the next codec call.</summary>
+        private bool _softwareReopenRequested;
         /// <summary>Stores the monotonic start time of the most recent expired high-speed frame conversion.</summary>
         private long _lastPresentationTimestamp;
         /// <summary>Supplies the playback deadlines used to discard expired frames, or null to present every decoded frame.</summary>
@@ -147,6 +154,11 @@ namespace MajdataPlay.FFmpeg.Internal
         internal AVHWDeviceType ActiveHardwareDeviceType => HardwareDecoding ? _options.HardwareDeviceType : AVHWDeviceType.AV_HWDEVICE_TYPE_NONE;
         /// <summary>Gets the most recent explanation for a hardware device or native frame transport fallback, or null when none has occurred.</summary>
         public string? HardwareFallbackReason { get; private set; }
+        /// <summary>Gets the number of threads used by the opened codec, or zero before the codec is opened.</summary>
+        /// <remarks>GPU-synchronized native frame decoding uses one codec thread; software decoding uses up to <see cref="DecoderOptions.ThreadCount"/> threads.</remarks>
+        public int DecoderThreadCount { get; private set; }
+        /// <summary>Gets how the opened codec parallelizes decoding: <c>frame</c>, <c>slice</c>, <c>codec</c> for library-managed workers, or <c>none</c>.</summary>
+        public string DecoderThreadingMode { get; private set; } = "none";
 
         /// <summary>Initializes a decoder with the specified resource limits and hardware configuration.</summary>
         /// <param name="options">The options to use without subsequent modification, or null to use the defaults.</param>
@@ -445,6 +457,7 @@ namespace MajdataPlay.FFmpeg.Internal
                     }
 
                     Check(codecResult, "Open video decoder");
+                    UpdateThreadDiagnostics();
                     DecoderName = ffmpeg.PtrToStringUTF8(codec->name);
                     _mediaCodecHardware = selectedMediaCodec && (mediaCodecCpu || _codec->hw_device_ctx != null);
                     HardwareDecoding = _mediaCodecHardware || _codec->hw_device_ctx != null;
@@ -463,12 +476,19 @@ namespace MajdataPlay.FFmpeg.Internal
                     }
 
                     TransferMode = HardwareDecoding ? (_cpuTransport ? "Hardware decode + CPU RGBA upload" : "Native GPU frames") : "Software RGBA upload";
+                    if (_softwareReopenRequested)
+                    {
+                        // A codec that negotiates its pixel format while opening rejected the
+                        // hardware format before any packet was consumed.
+                        ReopenSoftwareDecoder();
+                    }
+
                     break;
                 }
 
                 MajDebug.LogInfo("FFmpeg", "[Decoder] Opened codec=" + CodecName + ", decoder="
                     + DecoderName + ", device=" + DecoderDevice + ", transport=" + TransferMode + ", size="
-                    + Width + "x" + Height + ".");
+                    + Width + "x" + Height + ", threads=" + DecoderThreadCount + " (" + DecoderThreadingMode + ").");
                 _packet = ffmpeg.av_packet_alloc();
                 _frame = ffmpeg.av_frame_alloc();
                 if (_packet == null || _frame == null)
@@ -522,7 +542,8 @@ namespace MajdataPlay.FFmpeg.Internal
         /// <exception cref="ObjectDisposedException">This decoder has been disposed.</exception>
         /// <exception cref="OperationCanceledException">The token supplied to <see cref="Open"/> was canceled.</exception>
         /// <exception cref="TimeoutException">An input operation or worker-side GPU completion exceeded the configured timeout.</exception>
-        /// <exception cref="NotSupportedException">The decoded frame cannot satisfy the configured dimensions or hardware transport requirements.</exception>
+        /// <exception cref="NotSupportedException">The decoded frame cannot satisfy the configured dimensions or hardware transport requirements,
+        /// the codec rejected the hardware pixel format under a strict or fallback configuration, or a rejected packet can no longer be re-sent to a software decoder.</exception>
         /// <exception cref="OutOfMemoryException">FFmpeg cannot retain or convert a decoded frame.</exception>
         public DecodedVideoFrame? ReadFrame()
         {
@@ -551,6 +572,12 @@ namespace MajdataPlay.FFmpeg.Internal
                 using (UnityProfiler.Create(HardwareDecoding ? "FFmpeg.Decoder.Hardware.ReceiveFrame" : "FFmpeg.Decoder.Software.ReceiveFrame"))
                 {
                     result = ffmpeg.avcodec_receive_frame(_codec, _frame);
+                }
+
+                if (_softwareReopenRequested)
+                {
+                    ReplaceRejectedHardwareCodec();
+                    continue;
                 }
 
                 if (result == 0)
@@ -631,6 +658,7 @@ namespace MajdataPlay.FFmpeg.Internal
 
                 if (result != again)
                 {
+                    ThrowIfHardwareFormatRejected(result);
                     Check(result, "Decode video frame");
                 }
 
@@ -646,11 +674,20 @@ namespace MajdataPlay.FFmpeg.Internal
                         result = ffmpeg.avcodec_send_packet(_codec, _packet);
                     }
 
+                    if (_softwareReopenRequested)
+                    {
+                        // The codec never writes to the submitted packet, so the same
+                        // keyframe is re-sent to the replacement software decoder.
+                        ReplaceRejectedHardwareCodec();
+                        continue;
+                    }
+
                     if (result == again)
                     {
                         throw new InvalidOperationException("Video decoder returned EAGAIN from both send and receive.");
                     }
 
+                    ThrowIfHardwareFormatRejected(result);
                     Check(result, "Send video packet");
                     SynchronizeHardwareDecoding(false);
                     RecordPacketBitRate();
@@ -1131,7 +1168,8 @@ namespace MajdataPlay.FFmpeg.Internal
             }
 
             _lastReportedTransport = transport;
-            MajDebug.LogInfo("FFmpeg", "[Decoder] Active decoder=" + DecoderName + ", device=" + DecoderDevice + ", transport=" + transport + ".");
+            MajDebug.LogInfo("FFmpeg", "[Decoder] Active decoder=" + DecoderName + ", device=" + DecoderDevice + ", transport=" + transport
+                + ", threads=" + DecoderThreadCount + " (" + DecoderThreadingMode + ").");
         }
 
         /// <summary>Combines the backend name with an optional configured device description.</summary>
@@ -1345,6 +1383,7 @@ namespace MajdataPlay.FFmpeg.Internal
                     // Internal frame workers could submit more GPU work while the
                     // owning worker waits for the last output to complete.
                     _codec->thread_count = 1;
+                    _gpuSynchronizedCodec = true;
                 }
 
                 if (!_cpuTransport && _options.CreateHardwareSynchronization != null)
@@ -1355,6 +1394,7 @@ namespace MajdataPlay.FFmpeg.Internal
                         // A completion marker must follow every codec submission. Internal
                         // frame workers could otherwise submit after the marker was recorded.
                         _codec->thread_count = 1;
+                        _gpuSynchronizedCodec = true;
                     }
                     catch (NotSupportedException error) when (_options.AllowHardwareCpuUpload && !_options.RequireHardwareDecoding
                         && _options.FallbackHardwareOptions == null)
@@ -1373,6 +1413,7 @@ namespace MajdataPlay.FFmpeg.Internal
                         // The mapper completes a marker on this worker's decode
                         // context; internal codec workers must not submit after it.
                         _codec->thread_count = 1;
+                        _gpuSynchronizedCodec = true;
                         // Leave room beyond H.264's default DPB allocation for the
                         // bounded presentation queue and its replacement candidate.
                         _codec->extra_hw_frames = Math.Max(_codec->extra_hw_frames, 12);
@@ -1447,6 +1488,9 @@ namespace MajdataPlay.FFmpeg.Internal
             _codec->max_pixels = _options.MaximumPixelCount;
             _codec->opaque = (void*)GCHandle.ToIntPtr(_selfHandle);
             _skippingNonReferenceFrames = false;
+            _gpuSynchronizedCodec = false;
+            _hardwareFormatRejected = false;
+            _softwareReopenRequested = false;
         }
 
         /// <summary>Releases the current codec and activates the configured fallback hardware options if available.</summary>
@@ -1492,6 +1536,103 @@ namespace MajdataPlay.FFmpeg.Internal
             _pendingHardwarePackets = 0;
         }
 
+        /// <summary>Replaces the GPU-synchronized codec that rejected its hardware pixel format while the rejected packet is still pending.</summary>
+        /// <remarks>
+        /// The codec never writes to a submitted packet, so the pending keyframe is re-sent to the replacement software decoder
+        /// and decoding resumes without repositioning the demuxer. A packet that was already released cannot be recovered here.
+        /// </remarks>
+        /// <exception cref="NotSupportedException">The rejected packet was already released, or the build has no software decoder for the stream.</exception>
+        /// <exception cref="InvalidOperationException">FFmpeg cannot configure or open the software decoder.</exception>
+        /// <exception cref="OutOfMemoryException">FFmpeg cannot allocate the software codec context.</exception>
+        private void ReplaceRejectedHardwareCodec()
+        {
+            ffmpeg.av_frame_unref(_frame);
+            if (!_packetPending)
+            {
+                _softwareReopenRequested = false;
+                throw new NotSupportedException((HardwareFallbackReason ?? "The decoder rejected the requested hardware pixel format.")
+                    + " The rejected packet is no longer available for a software decoder.");
+            }
+
+            ReopenSoftwareDecoder();
+        }
+
+        /// <summary>Releases the hardware codec and its GPU resources, then opens a multi-threaded software decoder for the same stream.</summary>
+        /// <remarks>
+        /// Pending input state is preserved so the caller continues decoding from the current packet. Rejection normally happens
+        /// at the first keyframe; a mid-stream parameter-set change that is rejected drops the frames still reordered inside the
+        /// released codec and any retained endpoint candidate, which is accepted for this rare case.
+        /// </remarks>
+        /// <exception cref="NotSupportedException">The loaded FFmpeg build has no software decoder for the stream.</exception>
+        /// <exception cref="InvalidOperationException">FFmpeg cannot configure or open the software decoder.</exception>
+        /// <exception cref="OutOfMemoryException">FFmpeg cannot allocate the software codec context.</exception>
+        private void ReopenSoftwareDecoder()
+        {
+            var reason = HardwareFallbackReason ?? "The decoder rejected the requested hardware pixel format.";
+            var stream = _format->streams[_videoStreamIndex];
+            var defaultCodec = ffmpeg.avcodec_find_decoder(stream->codecpar->codec_id);
+            if (defaultCodec == null)
+            {
+                throw new NotSupportedException("This FFmpeg build has no software decoder for " + CodecName + ".");
+            }
+
+            var codec = FindSoftwareDecoder(defaultCodec);
+            // Preroll candidates may reference the hardware frame pool that is released with the codec.
+            ReleaseSeekCandidate();
+            ReleaseCodec();
+            _hardwarePixelFormat = AVPixelFormat.AV_PIX_FMT_NONE;
+            _hardwareDeviceDescription = null;
+            _cpuTransport = true;
+            _mediaCodecHardware = false;
+            _draining = false;
+            _ended = false;
+            AllocateCodec(codec, stream);
+            Check(ffmpeg.avcodec_open2(_codec, codec, null), "Open software video decoder");
+            UpdateThreadDiagnostics();
+            DecoderName = ffmpeg.PtrToStringUTF8(codec->name);
+            HardwareDecoding = false;
+            DecoderDevice = "Software";
+            TransferMode = "Software RGBA upload";
+            HardwareFallbackReason = reason + " Reopened the " + DecoderName + " software decoder with " + DecoderThreadCount
+                + " threads (" + DecoderThreadingMode + ").";
+            MajDebug.LogWarning("FFmpeg", "[Decoder] " + HardwareFallbackReason);
+        }
+
+        /// <summary>Reports a codec failure that followed a rejected hardware pixel format using the recorded fallback reason.</summary>
+        /// <param name="result">The native status code returned by the codec call.</param>
+        /// <exception cref="NotSupportedException">The codec failed after pixel-format selection rejected the hardware format.</exception>
+        private void ThrowIfHardwareFormatRejected(int result)
+        {
+            if (result < 0 && _hardwareFormatRejected)
+            {
+                throw new NotSupportedException(HardwareFallbackReason ?? "The decoder rejected the requested hardware pixel format.");
+            }
+        }
+
+        /// <summary>Captures the opened codec's thread count and threading mode for diagnostics.</summary>
+        /// <remarks>Call after <c>avcodec_open2</c> succeeds; libavcodec lowers the thread count to one for codecs without threading support.</remarks>
+        private void UpdateThreadDiagnostics()
+        {
+            DecoderThreadCount = Math.Max(1, _codec->thread_count);
+            if ((_codec->active_thread_type & ffmpeg.FF_THREAD_FRAME) != 0)
+            {
+                DecoderThreadingMode = "frame";
+            }
+            else if ((_codec->active_thread_type & ffmpeg.FF_THREAD_SLICE) != 0)
+            {
+                DecoderThreadingMode = "slice";
+            }
+            else if (DecoderThreadCount > 1 && _codec->codec != null && (_codec->codec->capabilities & ffmpeg.AV_CODEC_CAP_OTHER_THREADS) != 0)
+            {
+                DecoderThreadingMode = "codec";
+            }
+            else
+            {
+                DecoderThreadCount = 1;
+                DecoderThreadingMode = "none";
+            }
+        }
+
         /// <summary>Selects the requested hardware pixel format or a permitted software fallback without propagating exceptions into native code.</summary>
         /// <param name="context">The codec context whose opaque handle identifies the managed decoder.</param>
         /// <param name="formats">The native list of candidate pixel formats, terminated by AV_PIX_FMT_NONE.</param>
@@ -1508,6 +1649,7 @@ namespace MajdataPlay.FFmpeg.Internal
                     {
                         if (self._options.ConfigureHardwareFrames != null && !self.TryConfigureHardwareFrames(context, *cursor))
                         {
+                            self._hardwareFormatRejected = true;
                             return AVPixelFormat.AV_PIX_FMT_NONE;
                         }
 
@@ -1520,6 +1662,17 @@ namespace MajdataPlay.FFmpeg.Internal
                 MajDebug.LogWarning("FFmpeg", "[Decoder] " + self.HardwareFallbackReason);
                 if (self._options.RequireHardwareDecoding || self._options.FallbackHardwareOptions != null)
                 {
+                    self._hardwareFormatRejected = true;
+                    return AVPixelFormat.AV_PIX_FMT_NONE;
+                }
+
+                if (self._gpuSynchronizedCodec && Math.Min(self._options.ThreadCount, 16) > 1)
+                {
+                    // Software decoding must not inherit the single codec thread reserved for
+                    // GPU completion markers. The owning worker reopens a threaded software decoder.
+                    self.HardwareFallbackReason += " The GPU-synchronized codec is replaced by a multi-threaded software decoder.";
+                    self._hardwareFormatRejected = true;
+                    self._softwareReopenRequested = true;
                     return AVPixelFormat.AV_PIX_FMT_NONE;
                 }
 

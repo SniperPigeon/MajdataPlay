@@ -204,6 +204,11 @@ namespace MajdataPlay.FFmpeg
         public string DecoderName => _info?.DecoderName ?? "";
         /// <summary>Gets the decoder device description, or an empty string if unavailable.</summary>
         public string DecoderDevice => _info?.DecoderDevice ?? "";
+        /// <summary>Gets the number of threads used by the active codec, or zero if unavailable.</summary>
+        /// <remarks>Native GPU frame decoding that relies on worker-side completion markers reports one thread; software decoding reports its codec threads.</remarks>
+        public int DecoderThreadCount => _info?.DecoderThreadCount ?? 0;
+        /// <summary>Gets the active codec's threading mode (frame, slice, codec, or none), or an empty string if unavailable.</summary>
+        public string DecoderThreadingMode => _info?.DecoderThreadingMode ?? "";
         /// <summary>Gets the active decoder backend type; read this value after preparation.</summary>
         /// <remarks>Returns <see cref="VideoDecoderType.Software"/> when decoder information is unavailable.</remarks>
         public VideoDecoderType DecoderType => _info?.HardwareDecoding == true ? VideoDecoderType.Hardware : VideoDecoderType.Software;
@@ -693,7 +698,8 @@ namespace MajdataPlay.FFmpeg
                             _prepared = true;
                             State = VideoPlaybackState.Prepared;
                             MajDebug.LogInfo("FFmpeg", "[Player] Prepared; encoding=" + CodecName
-                                + ", decoder=" + DecoderName + ", type=" + DecoderType + ", device=" + DecoderDevice + ".");
+                                + ", decoder=" + DecoderName + ", type=" + DecoderType + ", device=" + DecoderDevice
+                                + ", threads=" + DecoderThreadCount + " (" + DecoderThreadingMode + ").");
                             var completion = _prepareCompletion;
                             _prepareCompletion = null;
                             _prepareCancellation = default;
