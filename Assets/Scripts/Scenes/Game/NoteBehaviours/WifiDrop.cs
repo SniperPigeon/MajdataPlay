@@ -65,9 +65,6 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                 _starStartPositions[0] = NoteHelper.GetTapPosition(StartPos + 0.11f, 4.55f);
                 _starStartPositions[1] = NoteHelper.GetTapPosition(StartPos, 4.8f);
                 _starStartPositions[2] = NoteHelper.GetTapPosition(StartPos - 0.13f, 4.55f);
-
-                starRenderers[0].sortingOrder = -1;
-                starRenderers[2].sortingOrder = -1;
             }
             else
             {
@@ -103,7 +100,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                     continue;
                 }
                 starTransforms[i] = star.transform;
-                star.transform.position = _starStartPositions[i];
+                NoteHelper.Sorting.SetPosition(star.transform, _starStartPositions[i]);
                 star.transform.localScale = new Vector3(0f, 0f, 1f);
             }
             SlideLength = 20;
@@ -184,7 +181,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                     continue;
                 }
                 starTransforms[i] = star.transform;
-                star.transform.position = _starStartPositions[i];
+                NoteHelper.Sorting.SetPosition(star.transform, _starStartPositions[i]);
                 star.transform.localScale = new Vector3(0f, 0f, 1f);
             }
 
@@ -325,7 +322,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                             {
                                 var starTransform = starTransforms[i];
 
-                                starTransform.position = _starStartPositions[i];
+                                NoteHelper.Sorting.SetPosition(starTransform, _starStartPositions[i]);
                             }
                             State = NoteStatus.Scaling;
                             goto case NoteStatus.Scaling;
@@ -377,7 +374,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                             for (var i = 0; i < stars.Length; i++)
                             {
                                 var starTransform = starTransforms[i];
-                                starTransform.position = _starEndPositions[i];
+                                NoteHelper.Sorting.SetPosition(starTransform, _starEndPositions[i]);
                             }
                             State = NoteStatus.Arrived;
                             goto case NoteStatus.Arrived;
@@ -391,7 +388,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                             var b = _starEndPositions[i];
                             var newPos = Vector3.Lerp(a, b, process);
 
-                            starTransform.position = newPos; //TODO add some runhua
+                            NoteHelper.Sorting.SetPosition(starTransform, newPos); //TODO add some runhua
                         }
                         break;
                     case NoteStatus.Arrived:
@@ -563,14 +560,15 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             foreach (var (i, renderer) in barRenderers.WithIndex())
             {
                 renderer.color = new Color(1f, 1f, 1f, 0f);
-                renderer.sortingOrder = SortOrder--;
-                renderer.sortingLayerName = "Slides";
+                NoteHelper.Sorting.Apply(renderer, NoteHelper.Sorting.Layer.Slides, SortOrder--);
 
                 renderer.sprite = barSprites[i];
             }
             foreach (var (i, star) in Stars.Span.WithIndex())
             {
                 var starRenderer = starRenderers[i];
+                var starSortOrder = IsClassic && i != 1 ? -1 : 0;
+                NoteHelper.Sorting.Apply(starRenderer, NoteHelper.Sorting.Layer.SlideStars, starSortOrder);
                 starRenderer.sprite = starSprite;
                 if (breakMaterial is not null)
                 {

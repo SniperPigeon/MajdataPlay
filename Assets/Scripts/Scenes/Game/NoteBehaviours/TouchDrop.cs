@@ -99,7 +99,8 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                 renderer.enabled = false;
             }
 
-            Transform.localScale *= USERSETTING_TOUCH_SCALE;
+            var scale = Transform.localScale;
+            Transform.localScale = new Vector3(scale.x * USERSETTING_TOUCH_SCALE, scale.y * USERSETTING_TOUCH_SCALE, 1f);
         }
         public void Init(TouchPoolingInfo poolingInfo)
         {
@@ -150,10 +151,10 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
 
             for (var i = 0; i < 4; i++)
             {
-                _fanRenderers[i].sortingOrder = SortOrder - (_fanSpriteSortOrder + i);
+                NoteHelper.Sorting.Apply(_fanRenderers[i], NoteHelper.Sorting.Layer.Touch, SortOrder - (_fanSpriteSortOrder + i));
             }
-            _pointRenderer.sortingOrder = SortOrder - _pointBorderSortOrder;
-            _justBorderRenderer.sortingOrder = SortOrder - _justBorderSortOrder;
+            NoteHelper.Sorting.Apply(_pointRenderer, NoteHelper.Sorting.Layer.Touch, SortOrder - _pointBorderSortOrder);
+            NoteHelper.Sorting.Apply(_justBorderRenderer, NoteHelper.Sorting.Layer.Touch, SortOrder - _justBorderSortOrder);
 
             State = NoteStatus.Inited;
         }
@@ -514,6 +515,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             for (var i = 0; i < 4; i++)
             {
                 var pos = (0.226f + distance) * GetAngle(i);
+                pos.z = _fanTransforms[i].localPosition.z;
                 _fanTransforms[i].localPosition = pos;
             }
         }
