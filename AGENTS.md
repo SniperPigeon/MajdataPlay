@@ -64,7 +64,7 @@ MajdataPlay 是一个跨平台 Simai 谱面播放器，也是一个 Unity 项目
 - 修改 `unsafe`、P/Invoke 或原生结构布局时，显式核对各目标 ABI 的指针宽度、C `long`、对齐、调用约定、所有权和线程约束。
 - 平台实现应留在相应 Platform 目录或平台受限 `.asmdef` 中，并保留 Editor 可编译性。不要用单一平台的成功掩盖其他平台分支的编译问题。
 - 所有成员均需添加英文XML文档（Unity message方法非必要可以不添加），文档应说明成员的用途；如果方法有参数，应当说明各个参数的用途；如果方法有返回值，应当说明方法会返回什么；如果方法有可能抛出异常，文档也应当列出可能的异常类型。
-- Android开发时，如果需要编写Java C# wrapper，请使用项目内的AndroidJavaGenerator源生成器生成wrapper；wrapper应根据java包名存放在`MajdataPlay.Platform.Android.Runtime`下，如果包名是`android.**`则对应`MajdataPlay.Platform.Android.Runtime.**`，如果包名是`java.**`则对应`MajdataPlay.Platform.Android.Runtime.Java.**`。
+- Android开发时，如果需要编写Java C# wrapper，请使用项目内的Tools/CSharp/AndroidJavaWrapperGenerator生成器生成wrapper；并更新`Assets/Plugins/MajdataPlay/Platform/Android`下的wrapper dll和xml文档。
 
 ## C#工具集代码约定
 
