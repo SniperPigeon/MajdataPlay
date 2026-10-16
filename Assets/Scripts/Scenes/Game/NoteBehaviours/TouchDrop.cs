@@ -151,10 +151,10 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
 
             for (var i = 0; i < 4; i++)
             {
-                NoteHelper.Sorting.Apply(_fanRenderers[i], NoteHelper.Sorting.Layer.Touch, SortOrder - (_fanSpriteSortOrder + i));
+                NoteHelper.Sorting.Apply(_fanRenderers[i], NoteHelper.Sorting.NoteLayer.Touch, SortOrder - (_fanSpriteSortOrder + i));
             }
-            NoteHelper.Sorting.Apply(_pointRenderer, NoteHelper.Sorting.Layer.Touch, SortOrder - _pointBorderSortOrder);
-            NoteHelper.Sorting.Apply(_justBorderRenderer, NoteHelper.Sorting.Layer.Touch, SortOrder - _justBorderSortOrder);
+            NoteHelper.Sorting.Apply(_pointRenderer, NoteHelper.Sorting.NoteLayer.Touch, SortOrder - _pointBorderSortOrder);
+            NoteHelper.Sorting.Apply(_justBorderRenderer, NoteHelper.Sorting.NoteLayer.Touch, SortOrder - _justBorderSortOrder);
 
             State = NoteStatus.Inited;
         }

@@ -381,13 +381,13 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             foreach (var renderer in barRenderers)
             {
                 renderer.color = new Color(1f, 1f, 1f, 0f);
-                NoteHelper.Sorting.Apply(renderer, NoteHelper.Sorting.Layer.Slides, SortOrder--);
+                NoteHelper.Sorting.Apply(renderer, NoteHelper.Sorting.NoteLayer.Slides, SortOrder--);
 
                 renderer.sprite = barSprite;
             }
 
             var starRenderer = star.GetComponent<SpriteRenderer>();
-            NoteHelper.Sorting.Apply(starRenderer, NoteHelper.Sorting.Layer.SlideStars);
+            NoteHelper.Sorting.Apply(starRenderer, NoteHelper.Sorting.NoteLayer.SlideStars);
             starRenderer.sprite = starSprite;
             if (breakMaterial is not null)
             {

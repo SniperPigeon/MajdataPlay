@@ -40,8 +40,8 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             _three = transform.GetChild(1).gameObject;
             _twoRenderer = _two.GetComponent<SpriteRenderer>();
             _threeRenderer = _three.GetComponent<SpriteRenderer>();
-            NoteHelper.Sorting.Apply(_twoRenderer, NoteHelper.Sorting.Layer.Touch);
-            NoteHelper.Sorting.Apply(_threeRenderer, NoteHelper.Sorting.Layer.Touch);
+            NoteHelper.Sorting.Apply(_twoRenderer, NoteHelper.Sorting.NoteLayer.Touch);
+            NoteHelper.Sorting.Apply(_threeRenderer, NoteHelper.Sorting.NoteLayer.Touch);
             var skin = MajInstances.SkinManager.GetTouchSkin();
             skin.Border_Normal.CopyTo(_normal);
             skin.Border_Each.CopyTo(_each);

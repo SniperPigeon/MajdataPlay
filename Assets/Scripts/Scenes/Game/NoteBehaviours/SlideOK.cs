@@ -54,7 +54,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             base.Awake();
             _displayCP = MajEnv.Settings.Display.DisplayCriticalPerfect;
             _spriteRenderer = GetComponent<SpriteRenderer>();
-            NoteHelper.Sorting.Apply(_spriteRenderer, NoteHelper.Sorting.Layer.SlideOK);
+            NoteHelper.Sorting.Apply(_spriteRenderer, NoteHelper.Sorting.NoteLayer.SlideOK);
             _animator = GetComponent<Animator>();
             _animator.enabled = false;
             _defaultMaterial = _spriteRenderer.sharedMaterial;
@@ -136,7 +136,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             {
                 sortingOrder += STRIDE - _sortingOrder;
             }
-            NoteHelper.Sorting.Apply(_spriteRenderer, NoteHelper.Sorting.Layer.SlideOK, sortingOrder);
+            NoteHelper.Sorting.Apply(_spriteRenderer, NoteHelper.Sorting.NoteLayer.SlideOK, sortingOrder);
 
             Play(isBreak);
             State = NoteStatus.Running;

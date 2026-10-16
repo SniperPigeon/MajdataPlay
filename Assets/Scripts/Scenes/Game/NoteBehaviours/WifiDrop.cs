@@ -560,7 +560,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             foreach (var (i, renderer) in barRenderers.WithIndex())
             {
                 renderer.color = new Color(1f, 1f, 1f, 0f);
-                NoteHelper.Sorting.Apply(renderer, NoteHelper.Sorting.Layer.Slides, SortOrder--);
+                NoteHelper.Sorting.Apply(renderer, NoteHelper.Sorting.NoteLayer.Slides, SortOrder--);
 
                 renderer.sprite = barSprites[i];
             }
@@ -568,7 +568,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             {
                 var starRenderer = starRenderers[i];
                 var starSortOrder = IsClassic && i != 1 ? -1 : 0;
-                NoteHelper.Sorting.Apply(starRenderer, NoteHelper.Sorting.Layer.SlideStars, starSortOrder);
+                NoteHelper.Sorting.Apply(starRenderer, NoteHelper.Sorting.NoteLayer.SlideStars, starSortOrder);
                 starRenderer.sprite = starSprite;
                 if (breakMaterial is not null)
                 {

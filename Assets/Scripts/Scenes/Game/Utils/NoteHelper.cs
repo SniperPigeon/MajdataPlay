@@ -37,26 +37,8 @@ namespace MajdataPlay.Scenes.Game.Utils
             /// <summary>
             /// Identifies the back-to-front groups of gameplay sprites.
             /// </summary>
-            internal enum Layer
+            internal enum NoteLayer
             {
-                /// <summary>Background images.</summary>
-                BG,
-                /// <summary>Unclassified sprites.</summary>
-                Default,
-                /// <summary>UI behind its mask.</summary>
-                UIAfterMask,
-                /// <summary>UI masks.</summary>
-                UIMask,
-                /// <summary>UI in front of its mask.</summary>
-                UIBeforeMask,
-                /// <summary>Background covers.</summary>
-                BGCover,
-                /// <summary>Firework effects.</summary>
-                FireWork,
-                /// <summary>The playfield outline.</summary>
-                Outline,
-                /// <summary>Playfield information.</summary>
-                TopInfo,
                 /// <summary>Slide and Wifi tracks.</summary>
                 Slides,
                 /// <summary>Stars following slide paths.</summary>
@@ -70,17 +52,7 @@ namespace MajdataPlay.Scenes.Game.Utils
                 /// <summary>TouchHold progress borders.</summary>
                 TouchHoldBorder,
                 /// <summary>Touch, TouchHold and multiple-touch borders.</summary>
-                Touch,
-                /// <summary>Button judgment effects.</summary>
-                NoteEffect,
-                /// <summary>Touch judgment effects.</summary>
-                TouchEffect,
-                /// <summary>Touch feedback masks.</summary>
-                BlackCircle,
-                /// <summary>Global masks.</summary>
-                GlobalMask,
-                /// <summary>Debug overlays.</summary>
-                Debug
+                Touch
             }
 
             /// <summary>
@@ -90,7 +62,7 @@ namespace MajdataPlay.Scenes.Game.Utils
             /// <param name="layer">The sprite's gameplay group.</param>
             /// <param name="sortOrder">The front-to-back priority; larger values appear in front.</param>
             /// <returns>The world-space Z coordinate for the sprite.</returns>
-            internal static float GetZIndex(Layer layer, int sortOrder = 0)
+            internal static float GetZIndex(NoteLayer layer, int sortOrder = 0)
             {
                 var offset = OrderDepth * sortOrder / (OrderScale + Math.Abs((double)sortOrder));
                 return (-(int)layer * LayerSpacing) - (float)offset;
@@ -102,7 +74,7 @@ namespace MajdataPlay.Scenes.Game.Utils
             /// <param name="renderer">The sprite renderer to configure.</param>
             /// <param name="layer">The sprite's gameplay group.</param>
             /// <param name="sortOrder">The priority within the gameplay group.</param>
-            internal static void Apply(SpriteRenderer renderer, Layer layer, int sortOrder = 0)
+            internal static void Apply(SpriteRenderer renderer, NoteLayer layer, int sortOrder = 0)
             {
                 renderer.sortingLayerID = 0;
                 renderer.sortingOrder = 0;
