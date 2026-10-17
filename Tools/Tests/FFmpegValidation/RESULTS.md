@@ -1,6 +1,42 @@
 # 本机验证结果
 
-最近验证日期：2026-10-12；此前渲染验证执行于 2026-10-07，跨平台矩阵执行于 2026-10-03。Windows / Unity 6000.3.17f1 / AMD Radeon RX 580 2048SP；Linux 使用本机 WSL Ubuntu 24.04；Android 真机为 Mi MIX 2S / Android 15 API 35 / Adreno 630 / Vulkan 1.1.128；Apple 构建测试使用用户提供的 Mac mini M4。当前 Windows/Linux/Android 图形桥接 ABI 为 **4**，Apple 保持 **2**；下方 ABI2/3 的记录为此前版本实测。
+最近验证日期：2026-10-17；此前 Android SAF 验证执行于 2026-10-12，渲染验证执行于 2026-10-07，跨平台矩阵执行于 2026-10-03。Windows / Unity 6000.3.17f1 / AMD Radeon RX 580 2048SP；Linux 使用本机 WSL Ubuntu 24.04；Android 真机为 Mi MIX 2S / Android 15 API 35 / Adreno 630 / Vulkan 1.1.128；Apple 构建测试使用用户提供的 Mac mini M4。当前 Windows/Linux/Android 图形桥接 ABI 为 **4**，Apple 保持 **2**；下方 ABI2/3 的记录为此前版本实测。
+
+## 2026-10-17：Camera 软件编码多线程
+
+### 修改
+
+`FFmpegVideoEncoder` 的 RGBA→YUV 颜色转换改用 `sws_alloc_context` + `threads` + `sws_scale_frame`：FFmpeg 9 的旧接口 `sws_scale` 固定退回 `slice_ctx[0]` 单线程执行，只有 frame 接口会把输出行分给 swscale worker。转换线程数取 `min(MaximumSoftwareThreads, Height / 32)`，硬件编码同样受益。libvpx-vp9 / libaom-av1 显式启用 `row-mt=1`（libvpx 默认只按 tile 列并行）。libx265 从 `pools=none:wpp=0` 改为 `pools=<worker数>:wpp=1` 加 x265 默认规模的 frame-threads，worker 为 1 时保持 `pools=none`。新增 `SoftwareThreadingMode`（frame/slice/codec/none）与 `ConverterThreadCount` 诊断，经 `VideoEncodeSession`、`FFmpegCameraCapturer` 和 Inspector 公开，并写入编码器打开日志。`mpeg4` 与 `libx264` 的 codec 线程配置本身未改：前者为 libavcodec slice 线程，后者为 x264 frame 线程（日志 `threads=N sliced_threads=0`）。
+
+### 分层验证结果
+
+| 验证层 | 实测结果 | 范围 |
+| --- | --- | --- |
+| .NET 9.0.317 / 纯托管默认模式 | **101 assertions PASS** | 选项边界与快照 |
+| .NET 9.0.317 / Windows x64 `--encode` | **886 assertions PASS** | 新增 320×192、4 worker 的 `mpeg4`（slice）与 `libx264`（codec）真实编码：原生 `thread_count=4`、`active_thread_type` 含 `FF_THREAD_SLICE` / 外部库自管线程、转换器 4 线程、60 帧逐帧解码颜色方向；单线程快照报告 `none` / 1 转换线程 |
+| .NET 9.0.317 / Windows x64 `--encode-software` | **4246 assertions PASS** | 四种软件编码器 CBR/VBR 平坦与复杂画面，`codec` 模式、2 线程转换器、libvpx/libaom `row-mt=1`；x265 日志 `Thread pool created using 2 threads` |
+| Unity 6000.3.17f1 / Windows x64 Mono、D3D11 Player `-TestCameraCapture`（MPEG4/VBR） | **412 Camera capture checks PASS** | fixture `MaximumSoftwareThreads=4`、128×96；metadata `Encoder=mpeg4; type=Software; mode=VBR; bit/s=16056; frames=10; dropped=0; threads=4 (slice); converterThreads=3; graphics=Direct3D11`；Diagnostics 日志每次打开编码器均为 `software workers=4 (slice), converter threads=3` |
+| Unity 6000.3.17f1 / Windows x64 Mono、D3D11 Player `-TestCameraCapture -CaptureFormat H264`（复用同一 Player，`-SkipBuild`） | **412 Camera capture checks PASS** | metadata `Encoder=libx264; type=Software; mode=VBR; bit/s=30648; frames=10; dropped=0; threads=4 (codec); converterThreads=3; graphics=Direct3D11`；日志 `software workers=4 (codec), converter threads=3` |
+
+Camera Player 冒烟在 NVIDIA GeForce RTX 3060 Laptop GPU（驱动 32.0.15.9174）上执行，与页首 AMD 记录不同机。fixture 新增录制开始后的断言：软件编码 `SoftwareThreadCount == 4` 且 `SoftwareThreadingMode != "none"`，`ConverterThreadCount == 3`（96 行按每 worker 32 行上限）。暂停/恢复与帧率差异回归仍全部通过，`.timing.txt` 为 `pause-resume: frames=25, PTS=0..0.8, maxGap=0.0333`、`capture-120-render-15: renders=20, frames=20, PTS=0..1.475`、`capture-5-render-30: renders=34–35, frames=8, PTS=0..1.4, maxGap=0.2`。报告、metadata、Diagnostics 与 Player 日志位于忽略目录 `.work/camera-threads/x64-Mono/d3d11-camera-builtin-software-{MPEG4,H264}-VBR.*`。
+
+本轮同时修复两个与编码器改动无关的既有测试脚本缺陷：`run-unity.ps1` 复制了生产 `Tools/AndroidJavaWrapper/src/**/*.e.cs`，但生成器输入缺少 `MajdataPlayActivity.e.cs` 依赖的 Activity 与 `CSharp*Callback` Java 声明，隔离 wrapper DLL 编译报 CS0246；现直接以仓库内 `MajdataPlayActivity.java` 和三个回调 Java 文件作为只读 `--input`，不向隔离 Player 额外打包 Java。`UnityCameraSmoke.cs` 的 `AreCaptureBuffersFree` 反射字段名 `State` 自 2026-10-05 `chore: style` 重命名为 `_state` 后失效，暂停检查抛 NullReferenceException；已改为 `_state`。另外，本机 OneDrive 路径下 PowerShell 5.1 `Remove-Item -Recurse` 删除生成绑定目录时触发长路径错误，重跑前需先用 Git Bash 删除 `.work/<目录>/Project-x64-native-video/Tools/AndroidJavaWrapper/src`，脚本未改。
+
+### 1080p 吞吐基准（临时程序，不在仓库）
+
+同机 120 帧 1920×1080 运动画面，`MaximumSoftwareThreads` 1 对 8，含颜色转换与编码、不含输出 I/O 等待之外的其他开销：
+
+| 编码器 | 1 worker | 8 worker |
+| --- | --- | --- |
+| mpeg4（slice） | 52.8 fps | 165.6 fps |
+| libx264（frame 线程） | 32.1 fps | 113.2 fps |
+| libx265（旧 `pools=none`） | 9.1 fps | 14.4 fps |
+| libx265（新 `pools=8:wpp=1`） | 10.2 fps | 35.8 fps |
+| libvpx-vp9（`row-mt=1`） | 3.8 fps | 10.0 fps |
+
+### 未验证
+
+Unity Editor 的 Camera Inspector 冒烟（`run-camera-editor.ps1`，fixture 已同步改为 `MaximumSoftwareThreads=4` 但未运行）、URP 与 `-CaptureHardware` Camera Player、IL2CPP Player、`EncoderNativeSmoke.c` / `NativeSoftwareEncoderSmoke.c`（已同步 x265 参数字符串，需要 gcc 与同 ABI 库）、Linux / macOS / iOS / Android 原生库上的 swscale 线程支持与 x265 线程池行为均未在本轮执行。Player 冒烟只覆盖 mpeg4 与 libx264，HEVC / AV1 / VP9 的 Player 路径未运行。
 
 ## 2026-10-12：Android SAF 原生 content 输入
 

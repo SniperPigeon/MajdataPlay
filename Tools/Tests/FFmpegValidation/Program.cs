@@ -77,7 +77,7 @@ static class Program
             if (encoding || encodingUnavailable || encodingHardware)
             {
                 _checks += EncodingChecks.RunNative(args[1], encodingUnavailable, encodingHardware);
-                Console.WriteLine("PASS: " + _checks + " assertions; encoder options, native encoder selection, output and cleanup.");
+                Console.WriteLine("PASS: " + _checks + " assertions; encoder options, native encoder selection, multi-threaded software encoding, output and cleanup.");
                 return 0;
             }
             if (allocations || softwareAllocations)

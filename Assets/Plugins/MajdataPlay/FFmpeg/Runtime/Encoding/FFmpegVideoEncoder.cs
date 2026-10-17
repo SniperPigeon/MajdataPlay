@@ -21,6 +21,8 @@ namespace MajdataPlay.FFmpeg
         private const string CheckedAmfConfigurationOption = "--extra-version=MajdataPlay-AMF-RC-v1-c0604b924b6a";
         /// <summary>Identifies the native wrapper that rejects ignored x265 parameters.</summary>
         private const string CheckedX265ConfigurationMarker = "MajdataPlay-X265-Params-v1-5b457330f94a";
+        /// <summary>Limits color-converter workers so each one converts at least this many output rows.</summary>
+        private const int MinimumConverterRowsPerThread = 32;
         /// <summary>Roots the managed local-file write callback for IL2CPP and Mono.</summary>
         private static readonly avio_alloc_context_write_packet s_writeCallback = WriteOutput;
         /// <summary>Roots the managed local-file seek callback for IL2CPP and Mono.</summary>
@@ -29,14 +31,6 @@ namespace MajdataPlay.FFmpeg
         private readonly EncoderOptions _options;
         /// <summary>Reuses the existing bounded one-second compressed bitrate estimator.</summary>
         private readonly VideoBitRateTracker _bitRateTracker = new VideoBitRateTracker();
-        /// <summary>Reuses input plane pointers for swscale.</summary>
-        private readonly byte*[] _source = new byte*[8];
-        /// <summary>Reuses input row strides for swscale.</summary>
-        private readonly int[] _sourceStride = new int[8];
-        /// <summary>Reuses output plane pointers for swscale.</summary>
-        private readonly byte*[] _destination = new byte*[4];
-        /// <summary>Reuses output row strides for swscale.</summary>
-        private readonly int[] _destinationStride = new int[4];
         /// <summary>Owns the output container context.</summary>
         private AVFormatContext* _format;
         /// <summary>Owns the selected codec context.</summary>
@@ -55,7 +49,7 @@ namespace MajdataPlay.FFmpeg
         private AVBufferRef* _hardwareDevice;
         /// <summary>Owns an optional VAAPI frame pool reference.</summary>
         private AVBufferRef* _hardwareFrames;
-        /// <summary>Owns the RGBA to encoder-pixel-format converter.</summary>
+        /// <summary>Owns the multi-threaded RGBA to encoder-pixel-format converter.</summary>
         private SwsContext* _scale;
         /// <summary>Owns the custom seekable local-file AVIO context.</summary>
         private AVIOContext* _io;
@@ -115,6 +109,11 @@ namespace MajdataPlay.FFmpeg
         public int FrameRate => _options.FrameRate;
         /// <summary>Gets the effective FFmpeg software codec worker count, or zero for hardware encoding.</summary>
         public int SoftwareThreadCount { get; private set; }
+        /// <summary>Gets how the software codec parallelizes encoding: <c>frame</c>, <c>slice</c>, <c>codec</c> for library-managed workers, or <c>none</c> for one thread or hardware encoding.</summary>
+        public string SoftwareThreadingMode { get; private set; } = "none";
+        /// <summary>Gets the number of swscale workers converting captured RGBA frames to the encoder input format, or zero before opening.</summary>
+        /// <remarks>Conversion runs on the CPU for hardware encoders as well, so this is independent of <see cref="SoftwareThreadCount"/>.</remarks>
+        public int ConverterThreadCount { get; private set; }
 
         /// <summary>Creates an encoder with an independent validated options snapshot.</summary>
         /// <param name="options">The settings to copy for this recording.</param>
@@ -189,7 +188,8 @@ namespace MajdataPlay.FFmpeg
                 _opened = true;
                 MajDebug.LogInfo("FFmpeg", "[Encoder] Opened encoder=" + EncoderName + ", backend=" + EncoderType
                     + ", mode=" + RateControlMode + ", target=" + _options.BitRate + ", maximum=" + _codec->rc_max_rate
-                    + ", software workers=" + SoftwareThreadCount + ".");
+                    + ", software workers=" + SoftwareThreadCount + " (" + SoftwareThreadingMode + "), converter threads="
+                    + ConverterThreadCount + ".");
             }
             catch
             {
@@ -234,21 +234,9 @@ namespace MajdataPlay.FFmpeg
                 }
             }
 
-            _source[0] = _rgba->data[0];
-            _sourceStride[0] = _rgba->linesize[0];
-            for (var plane = 0; plane < 4; plane++)
-            {
-                _destination[plane] = _frame->data[(uint)plane];
-                _destinationStride[plane] = _frame->linesize[(uint)plane];
-            }
-
-            var rows = ffmpeg.sws_scale(_scale, _source, _sourceStride, 0, Height, _destination, _destinationStride);
-            Check(rows, "Convert capture pixels");
-            if (rows != Height)
-            {
-                throw new InvalidOperationException("FFmpeg produced an incomplete encoder input frame.");
-            }
-
+            // The legacy sws_scale entry point always runs on one thread; the frame
+            // entry point distributes output rows across the converter workers.
+            Check(ffmpeg.sws_scale_frame(_scale, _frame, _rgba), "Convert capture pixels");
             _frame->pts = frameIndex;
             _frame->duration = 1;
             var submitted = _frame;
@@ -430,7 +418,7 @@ namespace MajdataPlay.FFmpeg
 
                 EncoderName = name;
                 EncoderType = hardware ? VideoEncoderType.Hardware : VideoEncoderType.Software;
-                SoftwareThreadCount = hardware ? 0 : Math.Max(1, _codec->thread_count);
+                UpdateThreadDiagnostics(hardware);
                 return true;
             }
             catch (Exception error) when (error is InvalidOperationException || error is NotSupportedException)
@@ -438,6 +426,39 @@ namespace MajdataPlay.FFmpeg
                 failures.Append(name).Append(": ").Append(error.Message).Append("; ");
                 ReleaseCodec();
                 return false;
+            }
+        }
+
+        /// <summary>Captures the opened codec's worker count and threading mode for diagnostics.</summary>
+        /// <param name="hardware">Whether the opened codec compresses on hardware and therefore reports no software workers.</param>
+        /// <remarks>Call after <c>avcodec_open2</c> succeeds; libavcodec lowers the thread count to one for codecs without threading support.</remarks>
+        private void UpdateThreadDiagnostics(bool hardware)
+        {
+            if (hardware)
+            {
+                SoftwareThreadCount = 0;
+                SoftwareThreadingMode = "none";
+                return;
+            }
+
+            SoftwareThreadCount = Math.Max(1, _codec->thread_count);
+            if ((_codec->active_thread_type & ffmpeg.FF_THREAD_FRAME) != 0)
+            {
+                SoftwareThreadingMode = "frame";
+            }
+            else if ((_codec->active_thread_type & ffmpeg.FF_THREAD_SLICE) != 0)
+            {
+                SoftwareThreadingMode = "slice";
+            }
+            else if (SoftwareThreadCount > 1 && _codec->codec != null
+                && (_codec->codec->capabilities & ffmpeg.AV_CODEC_CAP_OTHER_THREADS) != 0)
+            {
+                SoftwareThreadingMode = "codec";
+            }
+            else
+            {
+                SoftwareThreadCount = 1;
+                SoftwareThreadingMode = "none";
             }
         }
 
@@ -504,8 +525,15 @@ namespace MajdataPlay.FFmpeg
                 }
 
                 SetOption("preset", "veryfast");
-                SetOption("x265-params", "pools=none:frame-threads=" + _codec->thread_count.ToString(CultureInfo.InvariantCulture)
-                    + ":wpp=0:strict-cbr=" + (cbr ? "1" : "0"));
+                // A pool of exactly thread_count workers encodes wavefront rows, so the
+                // configured maximum still bounds compute threads. Frame threads only
+                // pipeline consecutive frames and follow x265's own CPU-count defaults;
+                // a single worker keeps x265 entirely on the calling thread.
+                var workers = _codec->thread_count;
+                var frameThreads = workers >= 16 ? 5 : workers >= 8 ? 3 : workers >= 4 ? 2 : 1;
+                var pools = workers > 1 ? workers.ToString(CultureInfo.InvariantCulture) : "none";
+                SetOption("x265-params", "pools=" + pools + ":frame-threads=" + frameThreads.ToString(CultureInfo.InvariantCulture)
+                    + ":wpp=" + (workers > 1 ? "1" : "0") + ":strict-cbr=" + (cbr ? "1" : "0"));
             }
             else if (name == "libvpx-vp9" || name == "libaom-av1")
             {
@@ -518,6 +546,9 @@ namespace MajdataPlay.FFmpeg
                 SetOption("drop-threshold", "0");
                 SetOption("undershoot-pct", "0");
                 SetOption("overshoot-pct", "0");
+                // Without row-based threading libvpx parallelizes only across tile
+                // columns, which leaves most codec workers idle at common sizes.
+                SetOption("row-mt", "1");
                 if (name == "libvpx-vp9")
                 {
                     SetOption("deadline", "good");
@@ -542,6 +573,15 @@ namespace MajdataPlay.FFmpeg
         private void SetOption(string name, string value)
         {
             Check(ffmpeg.av_opt_set(_codec->priv_data, name, value, 0), "Set encoder " + name);
+        }
+
+        /// <summary>Assigns one checked integer option on the color converter before initializing it.</summary>
+        /// <param name="name">The swscale option name.</param>
+        /// <param name="value">The integer, enum, or flag value.</param>
+        /// <exception cref="InvalidOperationException">FFmpeg rejects the option or its value.</exception>
+        private void SetConverterOption(string name, long value)
+        {
+            Check(ffmpeg.av_opt_set_int(_scale, name, value, 0), "Set converter " + name);
         }
 
         /// <summary>Selects a supported CPU input format that swscale can produce.</summary>
@@ -604,8 +644,8 @@ namespace MajdataPlay.FFmpeg
             _codec->pix_fmt = AVPixelFormat.AV_PIX_FMT_VAAPI;
         }
 
-        /// <summary>Allocates padded reusable pixel buffers, packet storage, and the color converter.</summary>
-        /// <exception cref="OutOfMemoryException">Native frame, packet, or pixel storage cannot be allocated.</exception>
+        /// <summary>Allocates padded reusable pixel buffers, packet storage, and the multi-threaded color converter.</summary>
+        /// <exception cref="OutOfMemoryException">Native frame, packet, pixel storage, or the converter cannot be allocated.</exception>
         /// <exception cref="InvalidOperationException">The converter cannot be configured.</exception>
         private void AllocateFrames()
         {
@@ -619,13 +659,29 @@ namespace MajdataPlay.FFmpeg
                 throw new OutOfMemoryException("Cannot allocate encoder frame or packet storage.");
             }
 
-            _scale = ffmpeg.sws_getContext(Width, Height, AVPixelFormat.AV_PIX_FMT_RGBA, Width, Height,
-                cpuFormat, (int)SwsFlags.SWS_BILINEAR, null, null, null);
+            _scale = ffmpeg.sws_alloc_context();
             if (_scale == null)
             {
-                throw new InvalidOperationException("Cannot create capture color converter.");
+                throw new OutOfMemoryException("Cannot allocate capture color converter.");
             }
 
+            // Workers split output rows, so small frames do not spawn idle converter threads.
+            var converterThreads = Math.Max(1, Math.Min(_options.MaximumSoftwareThreads, Height / MinimumConverterRowsPerThread));
+            SetConverterOption("srcw", Width);
+            SetConverterOption("srch", Height);
+            SetConverterOption("src_format", (long)AVPixelFormat.AV_PIX_FMT_RGBA);
+            SetConverterOption("dstw", Width);
+            SetConverterOption("dsth", Height);
+            SetConverterOption("dst_format", (long)cpuFormat);
+            SetConverterOption("sws_flags", (long)SwsFlags.SWS_BILINEAR);
+            SetConverterOption("threads", converterThreads);
+            Check(ffmpeg.sws_init_context(_scale, null, null), "Initialize capture color converter");
+            // swscale lowers the worker count when the build has no thread support.
+            long actualThreads = 0;
+            Check(ffmpeg.av_opt_get_int(_scale, "threads", 0, &actualThreads), "Query converter threads");
+            ConverterThreadCount = (int)Math.Max(1, actualThreads);
+
+            // The parent context forwards colorspace details to every worker context.
             var coefficients = *(int_array4*)ffmpeg.sws_getCoefficients(ffmpeg.SWS_CS_ITU709);
             Check(ffmpeg.sws_setColorspaceDetails(_scale, in coefficients, 1, in coefficients, 0,
                 0, 1 << 16, 1 << 16), "Configure BT.709 capture colors");

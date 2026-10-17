@@ -189,6 +189,12 @@ if (-not $SkipBuild) {
         '--sdk', (Join-Path $androidPlayer 'SDK'), '--output', $wrapperSources,
         '--namespace', 'MajdataPlay.Platform.Android.Runtime', '--no-docs', '--input', $unityArchive, '--input', $unityActivity,
         '--input', $contentJava, '--input', (Join-Path $project 'Assets/Plugins/Android/src/java/net/majdata/majdataplay/StorageAccess.java'))
+    # The production MajdataPlayActivity.e.cs extension is copied above and needs the
+    # activity and callback bindings; read these declarations from the repository so
+    # the isolated Player packages no additional Java.
+    foreach ($activityInput in @('MajdataPlayActivity.java', 'CSharpOnNewIntentCallback.java', 'CSharpOnActivityResultCallback.java', 'CSharpOnDispatchKeyEventCallback.java')) {
+        $generatorArguments += @('--input', (Join-Path $repo "Assets/Plugins/Android/src/java/net/majdata/majdataplay/$activityInput"))
+    }
     & dotnet @generatorArguments
     if ($LASTEXITCODE -ne 0) { throw 'Fresh CLI generation for the isolated FFmpeg project failed.' }
     & dotnet (Join-Path $cliDirectory 'bin/Release/net9.0/AndroidJavaWrapperGenerator.dll') '--build-wrapper' $project '--unity-data' $editorData

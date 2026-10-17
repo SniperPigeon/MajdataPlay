@@ -130,7 +130,7 @@ public sealed class FFmpegCameraEditorSmoke : EditorWindow
             Width = 128,
             Height = 96,
             FrameRate = 30,
-            MaximumSoftwareThreads = 1,
+            MaximumSoftwareThreads = 4,
             Format = VideoEncodingFormat.MPEG4,
             PreferredEncoderType = VideoEncoderType.Software,
             RateControlMode = VideoRateControlMode.VBR,

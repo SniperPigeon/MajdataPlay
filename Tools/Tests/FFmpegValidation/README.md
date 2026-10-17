@@ -259,9 +259,9 @@ dotnet run --project Tools/Tests/FFmpegValidation/FFmpegValidation.csproj -- `
   Tools/Tests/FFmpegValidation/.work/encoding --encode
 ```
 
-此模式枚举实际可用的视频编码器，使用真实 `mpeg4` 软件编码器生成 64×48 与需 SIMD 行尾补齐的 78×48 MP4，再用项目真实解码器检查红/蓝上下方向、可选垂直翻转、带缺帧间隔的 PTS、完整帧数、延迟排空与稳定 EOF。额外检查设置快照、实际软件线程数不超过上限、实际编码器/Software/VBR 身份、实时压缩码率非零、硬件偏好回退原因、预取消不会生成文件、取消和打开失败后的文件句柄释放，以及创建输出时不会覆盖已有文件。MPEG4 CBR 另编码并解码 60 帧平坦画面，要求实际压缩码率接近目标，验证原生填充包产生了恒定码率；可支持 CBR 的最大码率会收紧至目标值。若库还包含 `libx264`，同时执行 Matroska 容器中 H.264 软件 CBR 的真实编码和排空验证；否则只验证该软件 CBR 请求被明确拒绝，不能将其记为 H.264 CBR 编码通过。
+此模式枚举实际可用的视频编码器，使用真实 `mpeg4` 软件编码器生成 64×48 与需 SIMD 行尾补齐的 78×48 MP4，再用项目真实解码器检查红/蓝上下方向、可选垂直翻转、带缺帧间隔的 PTS、完整帧数、延迟排空与稳定 EOF。额外检查设置快照、实际软件线程数不超过上限、实际编码器/Software/VBR 身份、实时压缩码率非零、硬件偏好回退原因、预取消不会生成文件、取消和打开失败后的文件句柄释放，以及创建输出时不会覆盖已有文件。MPEG4 CBR 另编码并解码 60 帧平坦画面，要求实际压缩码率接近目标，验证原生填充包产生了恒定码率；可支持 CBR 的最大码率会收紧至目标值。若库还包含 `libx264`，同时执行 Matroska 容器中 H.264 软件 CBR 的真实编码和排空验证；否则只验证该软件 CBR 请求被明确拒绝，不能将其记为 H.264 CBR 编码通过。多线程检查以 `MaximumSoftwareThreads = 4` 录制 320×192 的 60 帧运动画面：`mpeg4` 必须报告 4 个 codec worker 且 `SoftwareThreadingMode` 为 `slice`（原生上下文 `active_thread_type` 含 `FF_THREAD_SLICE`），`libx264`（若存在）报告 `codec` 模式并保留 4 个 worker；两者的 RGBA→YUV 颜色转换器（`sws_scale_frame` + `threads`）都必须报告 4 个线程，输出逐帧解码并检查颜色方向。单线程快照另断言 `none` 模式与 1 个转换线程。
 
-完整软件编码 profile 使用 `--encode-software`，要求四种软件编码器全部存在，并实际编码、解码四种格式的 CBR/VBR 平坦与复杂画面，共 16 个文件。包含 H.264 CBR MP4、x265 原生非法参数拒绝、线程上限、设置快照、并发诊断读取、PTS 间隔、排空和文件所有权验证。输出目录需为本次验证准备的新目录：
+完整软件编码 profile 使用 `--encode-software`，要求四种软件编码器全部存在，并实际编码、解码四种格式的 CBR/VBR 平坦与复杂画面，共 16 个文件。包含 H.264 CBR MP4、x265 原生非法参数拒绝、线程上限、`codec` 线程模式与 2 线程颜色转换器、libvpx/libaom 包装器已启用 `row-mt`、设置快照、并发诊断读取、PTS 间隔、排空和文件所有权验证。输出目录需为本次验证准备的新目录：
 
 ```powershell
 dotnet run --project Tools/Tests/FFmpegValidation/FFmpegValidation.csproj -- `

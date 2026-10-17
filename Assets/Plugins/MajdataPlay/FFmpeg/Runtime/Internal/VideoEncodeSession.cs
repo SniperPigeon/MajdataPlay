@@ -78,6 +78,10 @@ namespace MajdataPlay.FFmpeg.Internal
         private long _currentBitRate, _encodedFrames, _bytesWritten;
         /// <summary>Stores the active software codec worker count, or zero for hardware.</summary>
         private int _softwareThreadCount;
+        /// <summary>Stores how the active software codec parallelizes encoding.</summary>
+        private string _softwareThreadingMode = "none";
+        /// <summary>Stores the active RGBA color-converter worker count.</summary>
+        private int _converterThreadCount;
 
         /// <summary>Starts a worker with bounded capture storage.</summary>
         /// <param name="path">The local output file to create.</param>
@@ -223,6 +227,28 @@ namespace MajdataPlay.FFmpeg.Internal
                 lock (_gate)
                 {
                     return _softwareThreadCount;
+                }
+            }
+        }
+        /// <summary>Gets how the active software codec parallelizes encoding: <c>frame</c>, <c>slice</c>, <c>codec</c>, or <c>none</c>.</summary>
+        public string SoftwareThreadingMode
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _softwareThreadingMode;
+                }
+            }
+        }
+        /// <summary>Gets the active RGBA color-converter worker count, or zero before initialization.</summary>
+        public int ConverterThreadCount
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _converterThreadCount;
                 }
             }
         }
@@ -410,6 +436,8 @@ namespace MajdataPlay.FFmpeg.Internal
                 _encodedFrames = encoder.EncodedFrames;
                 _bytesWritten = encoder.BytesWritten;
                 _softwareThreadCount = encoder.SoftwareThreadCount;
+                _softwareThreadingMode = encoder.SoftwareThreadingMode;
+                _converterThreadCount = encoder.ConverterThreadCount;
             }
         }
     }

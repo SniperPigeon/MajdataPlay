@@ -160,6 +160,8 @@ namespace MajdataPlay.FFmpeg.Editor
             EditorGUILayout.LabelField("Bitrate (target)", FormatBitRate(capturer.BitRate));
             EditorGUILayout.LabelField("Bitrate (maximum)", FormatBitRate(capturer.MaximumBitRate));
             EditorGUILayout.LabelField("Software threads (actual)", capturer.SoftwareThreadCount.ToString());
+            EditorGUILayout.LabelField("Software threading (actual)", capturer.SoftwareThreadingMode);
+            EditorGUILayout.LabelField("Converter threads (actual)", capturer.ConverterThreadCount.ToString());
             EditorGUILayout.LabelField("Submitted frames", capturer.EncodedFrames.ToString());
             EditorGUILayout.LabelField("Dropped frame intervals", capturer.DroppedFrames.ToString());
             EditorGUILayout.LabelField("Recording time", $"{capturer.TimeSeconds:F3} s");

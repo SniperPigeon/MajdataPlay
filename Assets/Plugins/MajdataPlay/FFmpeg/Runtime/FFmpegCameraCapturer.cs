@@ -167,6 +167,10 @@ namespace MajdataPlay.FFmpeg
         public long BytesWritten => _session?.BytesWritten ?? 0;
         /// <summary>Gets the active software codec worker count, or zero for hardware or before initialization.</summary>
         public int SoftwareThreadCount => _session?.SoftwareThreadCount ?? 0;
+        /// <summary>Gets how the active software codec parallelizes encoding: <c>frame</c>, <c>slice</c>, <c>codec</c>, or <c>none</c> for one thread, hardware, or before initialization.</summary>
+        public string SoftwareThreadingMode => _session?.SoftwareThreadingMode ?? "none";
+        /// <summary>Gets the active RGBA color-converter worker count, or zero before initialization.</summary>
+        public int ConverterThreadCount => _session?.ConverterThreadCount ?? 0;
         /// <summary>Gets the active recording format, or null before recording starts.</summary>
         public VideoEncodingFormat? EncodingFormat => _activeOptions?.Format;
         /// <summary>Gets the fixed recording width in pixels, or zero before recording starts.</summary>

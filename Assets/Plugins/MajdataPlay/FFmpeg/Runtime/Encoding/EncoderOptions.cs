@@ -54,8 +54,8 @@ namespace MajdataPlay.FFmpeg
         /// <summary>Gets or sets the preferred backend; hardware preference permits software fallback within the requested format.</summary>
         [field: SerializeField]
         public VideoEncoderType PreferredEncoderType { get; set; } = VideoEncoderType.Software;
-        /// <summary>Gets or sets the maximum FFmpeg software codec worker count, between 1 and 128.</summary>
-        /// <remarks>This controls codec workers, not all auxiliary threads created by an external library or driver.</remarks>
+        /// <summary>Gets or sets the maximum FFmpeg software codec worker count and RGBA color-converter worker count, between 1 and 128.</summary>
+        /// <remarks>This controls codec and converter workers, not all auxiliary threads created by an external library or driver. Hardware encoders still convert captured frames on the CPU.</remarks>
         [field: SerializeField]
         public int MaximumSoftwareThreads { get; set; } = Math.Min(Environment.ProcessorCount, 8);
         /// <summary>Gets or sets the requested compressed video format.</summary>

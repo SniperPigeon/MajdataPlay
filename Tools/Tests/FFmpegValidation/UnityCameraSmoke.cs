@@ -90,7 +90,7 @@ public sealed class FFmpegCameraSmoke : MonoBehaviour
         }
         _capturer.Options = new EncoderOptions
         {
-            Width = 128, Height = 96, FrameRate = 30, MaximumSoftwareThreads = 1,
+            Width = 128, Height = 96, FrameRate = 30, MaximumSoftwareThreads = 4,
             Format = format,
             PreferredEncoderType = hardware ? VideoEncoderType.Hardware : VideoEncoderType.Software,
             RateControlMode = mode,
@@ -111,6 +111,13 @@ public sealed class FFmpegCameraSmoke : MonoBehaviour
         Check(_capturer.EncodingFormat == format, "actual codec format matches the software or hardware request");
         Check(_capturer.RateControlMode == mode, "actual rate-control mode");
         Check(_capturer.MaximumBitRate == (mode == VideoRateControlMode.CBR ? 400000 : 800000), "effective maximum follows actual CBR or VBR mode");
+        if (!hardware)
+        {
+            Check(_capturer.SoftwareThreadCount == 4 && _capturer.SoftwareThreadingMode != "none",
+                "software encoder uses the requested workers: threads=" + _capturer.SoftwareThreadCount + " (" + _capturer.SoftwareThreadingMode + ")");
+        }
+        // 96 rows at 32 rows per worker caps the converter below the four requested threads.
+        Check(_capturer.ConverterThreadCount == 3, "color converter splits rows across threads: converterThreads=" + _capturer.ConverterThreadCount);
         _capturer.Options.BitRate = 123000;
         Check(_capturer.BitRate == 400000, "active settings remain a snapshot");
         var begin = Time.realtimeSinceStartup;
@@ -195,7 +202,8 @@ public sealed class FFmpegCameraSmoke : MonoBehaviour
         }
         File.WriteAllText(_report + ".metadata.txt", "Encoder=" + _capturer.EncoderName + "; type=" + _capturer.EncoderType
             + "; mode=" + _capturer.RateControlMode + "; bit/s=" + _capturer.CurrentBitRate + "; frames=" + _capturer.EncodedFrames
-            + "; dropped=" + _capturer.DroppedFrames + "; graphics=" + SystemInfo.graphicsDeviceType);
+            + "; dropped=" + _capturer.DroppedFrames + "; threads=" + _capturer.SoftwareThreadCount + " (" + _capturer.SoftwareThreadingMode
+            + "); converterThreads=" + _capturer.ConverterThreadCount + "; graphics=" + SystemInfo.graphicsDeviceType);
     }
 
     /// <summary>Checks that a paused session drains accepted work and resumes without advancing media time.</summary>
@@ -476,7 +484,7 @@ public sealed class FFmpegCameraSmoke : MonoBehaviour
         {
             foreach (var frame in frames)
             {
-                var state = frame!.GetType().GetField("State", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                var state = frame!.GetType().GetField("_state", BindingFlags.Instance | BindingFlags.NonPublic)!;
                 if (Convert.ToInt32(state.GetValue(frame)) != 0)
                 {
                     return false;

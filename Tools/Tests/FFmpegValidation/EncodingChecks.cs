@@ -50,6 +50,11 @@ namespace MajdataPlay.FFmpeg.Validation
             TestRoundTrip(directory, false);
             TestRoundTrip(directory, true);
             TestRoundTrip(directory, false, 78);
+            TestMultiThreadedSoftwareEncoding(directory, VideoEncodingFormat.MPEG4, "mpeg4", "slice");
+            if (encoders.Contains("libx264"))
+            {
+                TestMultiThreadedSoftwareEncoding(directory, VideoEncodingFormat.H264, "libx264", "codec");
+            }
             TestHardwareFallback(directory);
             TestCancellationAndFailureCleanup(directory);
             TestSessionOwnershipAndDrain(directory);
@@ -127,8 +132,16 @@ namespace MajdataPlay.FFmpeg.Validation
                     "software diagnostics preserve the snapshotted target and effective maximum");
                 Check(encoder.SoftwareThreadCount > 0 && encoder.SoftwareThreadCount <= 2,
                     "software codec workers respect the construction-time maximum");
+                Check(encoder.SoftwareThreadingMode == "codec" && encoder.ConverterThreadCount == 2,
+                    "external software codecs manage their own workers and the converter uses the requested threads");
                 var context = (AVCodecContext*)Pointer.Unbox(typeof(FFmpegVideoEncoder)
                     .GetField("_codec", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(encoder)!);
+                if (format == VideoEncodingFormat.VP9 || format == VideoEncodingFormat.AV1)
+                {
+                    long rowThreading = 0;
+                    Check(ffmpeg.av_opt_get_int(context->priv_data, "row-mt", 0, &rowThreading) >= 0 && rowThreading == 1,
+                        "libvpx/libaom row-based multi-threading is enabled on the opened wrapper");
+                }
                 Check(context->bit_rate == 200_000 && context->rc_max_rate == maximum && context->rc_buffer_size == maximum
                     && context->rc_min_rate == (mode == VideoRateControlMode.CBR ? 200_000 : 0),
                     "opened native codec retains the requested rate-control inputs");
@@ -420,6 +433,8 @@ namespace MajdataPlay.FFmpeg.Validation
                     && encoder.MaximumBitRate == 400_000, "VBR reports its applied format, target, and maximum rate");
                 Check(encoder.SoftwareThreadCount > 0 && encoder.SoftwareThreadCount <= 1,
                     "actual software thread count respects the construction snapshot");
+                Check(encoder.SoftwareThreadingMode == "none" && encoder.ConverterThreadCount == 1,
+                    "single-worker snapshot reports no codec threading and one converter thread");
                 Expect<ArgumentException>(() => encoder.Encode(pixels.AsSpan(0, pixels.Length - 1), 0, flipVertically),
                     "truncated RGBA input is rejected");
                 foreach (var frameIndex in frameIndices)
@@ -463,6 +478,97 @@ namespace MajdataPlay.FFmpeg.Validation
             }
             using var exclusive = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
             Check(exclusive.Length > 0, "encoder and decoder release the output file handle");
+        }
+
+        /// <summary>Checks that a multi-worker software configuration actually opens threaded codec and converter contexts and still decodes correctly.</summary>
+        /// <param name="directory">The isolated output directory.</param>
+        /// <param name="format">The requested software format.</param>
+        /// <param name="name">The expected FFmpeg encoder name.</param>
+        /// <param name="threadingMode">The expected codec threading mode: <c>slice</c> for libavcodec slice workers or <c>codec</c> for library-managed workers.</param>
+        /// <exception cref="Exception">Threading configuration, worker counts, or decoded output are incorrect.</exception>
+        private static unsafe void TestMultiThreadedSoftwareEncoding(string directory, VideoEncodingFormat format, string name, string threadingMode)
+        {
+            const int threads = 4;
+            var path = Path.Combine(directory, "threaded-" + name + ".mp4");
+            var options = CreateOptions();
+            options.Width = 320;
+            options.Height = 192;
+            options.Format = format;
+            options.MaximumSoftwareThreads = threads;
+            options.BitRate = 1_000_000;
+            options.MaximumBitRate = 2_000_000;
+            var pixels = CreatePixels(options.Width, options.Height);
+            using (var encoder = new FFmpegVideoEncoder(options))
+            {
+                encoder.Open(path, CancellationToken.None);
+                Check(encoder.EncoderName == name && encoder.EncoderType == VideoEncoderType.Software,
+                    "multi-threaded request selects the expected software encoder");
+                Check(encoder.SoftwareThreadCount == threads && encoder.SoftwareThreadingMode == threadingMode,
+                    name + " opens with every requested codec worker in " + threadingMode + " mode");
+                Check(encoder.ConverterThreadCount == threads, "color converter opens with every requested worker for a frame tall enough to split");
+                var context = (AVCodecContext*)Pointer.Unbox(typeof(FFmpegVideoEncoder)
+                    .GetField("_codec", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(encoder)!);
+                Check(context->thread_count == threads, "native codec context retains the requested worker count after opening");
+                if (threadingMode == "slice")
+                {
+                    Check((context->active_thread_type & ffmpeg.FF_THREAD_SLICE) != 0, "libavcodec activates slice threading for the built-in encoder");
+                }
+                else
+                {
+                    Check(context->active_thread_type == 0 && (context->codec->capabilities & ffmpeg.AV_CODEC_CAP_OTHER_THREADS) != 0,
+                        "the external library manages its own worker threads");
+                }
+                for (var index = 0; index < 60; index++)
+                {
+                    AddMovingBar(pixels, options.Width, options.Height, index);
+                    encoder.Encode(pixels, index, false);
+                }
+                encoder.Complete();
+                Check(encoder.EncodedFrames == 60 && encoder.BytesWritten > 0, "threaded software encoder drains every accepted frame");
+                Console.WriteLine("Threaded " + name + ": workers=" + encoder.SoftwareThreadCount + " (" + encoder.SoftwareThreadingMode
+                    + "); converter=" + encoder.ConverterThreadCount + "; bit/s=" + encoder.CurrentBitRate);
+            }
+            using var decoder = new FFmpegVideoDecoder();
+            decoder.Open(path, CancellationToken.None);
+            Check(decoder.Width == options.Width && decoder.Height == options.Height, "threaded output retains the requested resolution");
+            var count = 0;
+            while (true)
+            {
+                using var frame = decoder.ReadFrame();
+                if (frame == null)
+                {
+                    break;
+                }
+                Check(Math.Abs(frame.PresentationTime - count / 30.0) < 0.001, "threaded output keeps monotonic presentation timing");
+                CheckColor(frame, 8, false, "threaded output bottom half");
+                CheckColor(frame, frame.Height - 8, true, "threaded output top half");
+                count++;
+            }
+            Check(count == 60, "threaded output decodes every submitted frame");
+        }
+
+        /// <summary>Draws a moving opaque green bar to the right of the orientation sample column so every frame differs.</summary>
+        /// <param name="pixels">The packed top-down RGBA fixture to modify in place.</param>
+        /// <param name="width">The fixture width in pixels.</param>
+        /// <param name="height">The fixture height in pixels.</param>
+        /// <param name="index">The frame number that positions the bar.</param>
+        private static void AddMovingBar(byte[] pixels, int width, int height, int index)
+        {
+            const int barWidth = 32;
+            const int margin = 64;
+            var travel = width - margin - barWidth;
+            var start = margin + (index * 8) % travel;
+            for (var y = 0; y < height; y++)
+            {
+                for (var x = margin; x < width; x++)
+                {
+                    var offset = (y * width + x) * 4;
+                    var inBar = x >= start && x < start + barWidth;
+                    pixels[offset] = inBar ? (byte)0 : y < height / 2 ? (byte)255 : (byte)0;
+                    pixels[offset + 1] = inBar ? (byte)255 : (byte)0;
+                    pixels[offset + 2] = inBar ? (byte)0 : y < height / 2 ? (byte)0 : (byte)255;
+                }
+            }
         }
 
         /// <summary>Builds an opaque red top half and blue bottom half in top-down RGBA order.</summary>

@@ -201,9 +201,9 @@ static int ConfigureHardware(AVCodecContext* codec, const char* name, int cbr) {
                      "x265 parameters use the reviewed rejection patch")
             && Native(av_opt_set(codec->priv_data, "preset", "veryfast", 0), "x265 preset")
             && Native(av_opt_set(codec->priv_data, "x265-params", cbr
-                          ? "pools=none:frame-threads=2:wpp=0:strict-cbr=1"
-                          : "pools=none:frame-threads=2:wpp=0:strict-cbr=0", 0),
-                      "checked x265 strict-CBR/VBR and bounded worker configuration");
+                          ? "pools=2:frame-threads=1:wpp=1:strict-cbr=1"
+                          : "pools=2:frame-threads=1:wpp=1:strict-cbr=0", 0),
+                      "checked x265 strict-CBR/VBR and bounded worker-pool configuration");
     }
     if (!strcmp(name, "libvpx-vp9") || !strcmp(name, "libaom-av1")) {
         if (!Native(av_opt_set(codec->priv_data, "crf", "-1", 0), "disable constrained-quality mode")
