@@ -1135,7 +1135,8 @@ def stage_amf_license(destination):
 
 def recording_configuration(target):
     """Enable all mandatory software formats alongside existing hardware candidates."""
-    encoders = ['mpeg4', 'libx264', 'libx265', 'libvpx_vp9', 'libaom_av1']
+    # FFmpeg's built-in AAC encoder needs no external library and stores audio in both MP4 and Matroska recordings.
+    encoders = ['mpeg4', 'libx264', 'libx265', 'libvpx_vp9', 'libaom_av1', 'aac']
     if target.startswith(('win-', 'linux-')) and target != 'win-arm64':
         encoders += ['h264_nvenc', 'hevc_nvenc', 'av1_nvenc']
     if target.startswith('win-') and target != 'win-arm64':

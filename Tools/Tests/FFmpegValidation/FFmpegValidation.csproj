@@ -18,6 +18,7 @@
     <Compile Include="VideoBitRateChecks.cs" />
     <Compile Include="AllocationChecks.cs" />
     <Compile Include="EncodingChecks.cs" />
+    <Compile Include="MuxingChecks.cs" />
     <Compile Include="FrameEvictionChecks.cs" />
     <Compile Include="GpuWaitChecks.cs" />
     <Compile Include="HardwareRejectionChecks.cs" />

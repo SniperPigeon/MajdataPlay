@@ -31,6 +31,7 @@ internal static partial class Program
         VerifySharedDeviceFactory();
         VerifyPointerDevices();
         VerifySupplementalDeviceFactory();
+        VerifyAudioSampleRingBuffer();
         Console.WriteLine($"IO_VALIDATION_PASSED ({_assertions} assertions)");
     }
 

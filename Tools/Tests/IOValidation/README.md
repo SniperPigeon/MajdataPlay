@@ -25,6 +25,10 @@ capabilities, one snapshot per shared device, capability polling intervals,
 disconnect release, all eight LED colors, brightness and checksum encoding,
 change throttling, and output replay after reconnect.
 
+The audio recorder buffer checks cover keeping the front pair of a multichannel
+Bass mix, 16-bit to float scaling, wraparound, dropping new frames when full, and
+whole-frame reads. They do not exercise Bass DSP callbacks or a real output device.
+
 NPro checks cover the packed touch mask and both button bytes, short reports,
 split and coalesced bulk chunks, oversized chunks, partial-report drops on disconnect,
 the SEGA light board frame header, checksum, brightness, and escaping.

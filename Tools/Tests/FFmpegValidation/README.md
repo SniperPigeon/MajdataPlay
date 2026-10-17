@@ -293,6 +293,18 @@ dotnet run --project Tools/Tests/FFmpegValidation/FFmpegValidation.csproj -- `
 
 所有素材保存在输出目录的独立随机子目录，运行不会覆盖已有文件。上述 .NET 9 检查只验证托管配置和 FFmpeg 编码/封装/解码，不能替代 Unity Camera 最终渲染、异步 GPU 回读、场景销毁、实际硬件编码器、Mono/IL2CPP 或移动平台验证。
 
+### 录制音视频合成
+
+`--mux` 验证 `FFmpegMediaMuxer`：先用真实 `mpeg4` 编码 2 秒 64×48@30 的 Matroska 视频（与 capturer 临时文件同一容器），再与 2 秒 48 kHz 立体声正弦 float PCM 合成。
+
+```powershell
+dotnet run --project Tools/Tests/FFmpegValidation/FFmpegValidation.csproj -- `
+  Assets/Plugins/MajdataPlay/FFmpeg/Native/Windows/x86_64 `
+  Tools/Tests/FFmpegValidation/.work/muxing --mux
+```
+
+检查项：Matroska 输出恰有一条按包复制的视频流（60 包）和一条音频流；库含 AAC encoder 时音频必须为 `aac`，否则为 `pcm_s16le` 并逐字节核对样本值与声道顺序；音视频起点同为 0、时长均约 2 秒、包按时间交错。MP4 在有 AAC 时必须写出 AAC，无 AAC 时接受 mp4 muxer 存 PCM 或明确要求 AAC 的 `NotSupportedException`。另验证空 PCM 输出纯视频、尾部不完整帧被丢弃、预取消、缺失视频与不可 seek 输出的拒绝。不带参数的默认测试包含 float→16-bit 的舍入/限幅/NaN 和参数校验。此模式不覆盖 Bass DSP 采集、Unity Camera 或游戏内 `FFmpegRecorder` 生命周期。
+
 原生后端回退测试检查 H.264 的 D3D12VA/Vulkan 硬件配置，并注入首选设备获取失败，验证严格 GPU 模式和允许 CPU 上传模式均可尝试下一硬件后端、得到正确的实际设备身份并继续 seek。此测试验证回退链，不代表已在对应原生后端完成视频解码。
 
 ### 每帧托管分配与帧所有权

@@ -40,6 +40,10 @@ namespace MajdataPlay.IO
         readonly static AsioProcedure _asioProcedure;
 #endif
         private static int BassGlobalMixer = -114514;
+        /// <summary>Holds the seconds of output audio an audio recorder buffers for a slow consumer.</summary>
+        private const int AudioRecorderBufferSeconds = 4;
+        /// <summary>Holds the BassSimple device output stream that exposes the final device mix, or zero before a recorder needs it.</summary>
+        private static int s_bassDeviceOutputStream;
 
         public bool PlayDebug;
 
@@ -407,6 +411,8 @@ namespace MajdataPlay.IO
 #endif
                 Bass.Stop();
                 Bass.Free();
+                // Bass.Free released the device output stream with the device.
+                s_bassDeviceOutputStream = 0;
             }
         }
 
@@ -632,6 +638,61 @@ namespace MajdataPlay.IO
                 BassAsio.ControlPanel();
             }
 #endif
+        }
+        /// <summary>Creates a recorder that captures the final audio output of the Bass backend.</summary>
+        /// <remarks>
+        /// WASAPI and ASIO capture the global mixer that feeds the device; BassSimple captures the device's final output mix.
+        /// Every call returns an independent recorder with its own capture DSP, buffer, and start/stop state; recorders only share
+        /// the observed output channel, which disposing a recorder never frees. The caller owns the returned recorder and must
+        /// dispose it before this manager is destroyed.
+        /// </remarks>
+        /// <returns>A stopped recorder producing interleaved float samples at the output sample rate.</returns>
+        /// <exception cref="NotSupportedException">The active backend is not a Bass backend, or the output uses 8-bit samples.</exception>
+        /// <exception cref="InvalidOperationException">The Bass output has not been initialized or cannot accept a capture DSP.</exception>
+        public IAudioRecorder CreateAudioRecorder()
+        {
+            var backend = MajEnv.Settings.Audio.Backend;
+            var outputChannel = backend switch
+            {
+                SoundBackendOption.Asio or SoundBackendOption.Wasapi => GetBassGlobalMixer(),
+                SoundBackendOption.BassSimple => GetBassDeviceOutputStream(),
+                _ => throw new NotSupportedException($"Audio recording requires a Bass backend, but the active backend is {backend}.")
+            };
+            return new BassAudioRecorder(outputChannel, AudioRecorderBufferSeconds);
+        }
+        /// <summary>Gets the global mixer feeding the WASAPI or ASIO device.</summary>
+        /// <returns>The decoding mixer handle.</returns>
+        /// <exception cref="InvalidOperationException">The mixer has not been created.</exception>
+        static int GetBassGlobalMixer()
+        {
+            if (BassGlobalMixer == -114514 || BassGlobalMixer == 0)
+            {
+                throw new InvalidOperationException("The Bass global mixer has not been initialized.");
+            }
+            return BassGlobalMixer;
+        }
+        /// <summary>Gets the stream representing the BassSimple device's final output mix, creating it on first use.</summary>
+        /// <returns>The device output stream handle.</returns>
+        /// <exception cref="InvalidOperationException">Bass cannot create or start the device output stream.</exception>
+        static int GetBassDeviceOutputStream()
+        {
+            if (s_bassDeviceOutputStream != 0)
+            {
+                return s_bassDeviceOutputStream;
+            }
+            // Bass creates the stream in the device's own output format and frees it in Bass.Free.
+            var stream = Bass.CreateStream(0, 0, BassFlags.Default, StreamProcedureType.Device);
+            if (stream == 0)
+            {
+                throw new InvalidOperationException($"Cannot create the Bass device output stream: {Bass.LastError}");
+            }
+            if (Bass.ChannelIsActive(stream) != PlaybackState.Playing && !Bass.ChannelPlay(stream))
+            {
+                throw new InvalidOperationException($"Cannot start the Bass device output stream: {Bass.LastError}");
+            }
+            MajDebug.LogInfo("[Audio][Bass]Created device output stream for recording");
+            s_bassDeviceOutputStream = stream;
+            return stream;
         }
         static void GenerateMixingMatrix(int chCount)
         {

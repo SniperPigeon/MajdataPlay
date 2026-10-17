@@ -448,7 +448,7 @@ def verify_software_encoder_provenance(directory, manifest):
     assert manifest.get('license') == 'GPL-3.0-or-later', (target, 'full encoder profile requires GPL-3.0-or-later')
     assert manifest.get('buildDependencies', {}).get('softwareEncoders') == lock, (target, 'software dependency lock mismatch')
     encoders = manifest.get('recordingProfile', {}).get('encoders', [])
-    assert {'mpeg4', *SOFTWARE_ENCODERS.values()} <= set(encoders), (target, 'incomplete software recording profile')
+    assert {'mpeg4', 'aac', *SOFTWARE_ENCODERS.values()} <= set(encoders), (target, 'incomplete software recording profile')
     for option in ['--enable-gpl', '--enable-libx264', '--enable-libx265', '--enable-libvpx', '--enable-libaom']:
         assert option in manifest['configure'], (target, option, 'software encoder configure flag missing')
     licenses = {item['file']: item for item in manifest.get('buildDependencyLicenses', [])}

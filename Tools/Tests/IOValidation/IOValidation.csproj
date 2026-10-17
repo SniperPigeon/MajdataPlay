@@ -38,5 +38,6 @@
     <Compile Include="../../../Assets/Scripts/IO/Devices/GameDeviceManager.cs" Link="Production/GameDeviceManager.cs" />
     <Compile Include="../../../Assets/Scripts/IO/Base/PipePacket.cs" Link="Production/PipePacket.cs" />
     <Compile Include="../../../Assets/Plugins/MajdataPlay/Buffers/SpanBuffer.cs" Link="Production/SpanBuffer.cs" />
+    <Compile Include="../../../Assets/Scripts/IO/Base/Audio/AudioSampleRingBuffer.cs" Link="Production/AudioSampleRingBuffer.cs" />
   </ItemGroup>
 </Project>

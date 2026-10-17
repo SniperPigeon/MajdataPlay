@@ -118,7 +118,7 @@ Linux/Android 默认没有外部 TLS 后端，支持本地文件和 HTTP；HTTPS
 
 | 录制目标 | 显式启用的 encoder | 显式启用的 muxer |
 | --- | --- | --- |
-| 全部平台 | `libx264`（H.264）、`libx265`（HEVC/H.265）、`libvpx-vp9`（VP9）、`libaom-av1`（AV1）、`mpeg4` 软件编码（CBR/VBR）；MPEG4 构建依赖会额外启用 `h263` | `mov`、`mp4`、`matroska`、`webm`、`avi` |
+| 全部平台 | `libx264`（H.264）、`libx265`（HEVC/H.265）、`libvpx-vp9`（VP9）、`libaom-av1`（AV1）、`mpeg4` 软件编码（CBR/VBR）；MPEG4 构建依赖会额外启用 `h263`；FFmpeg 内置 `aac` 音频编码（录制音轨，无外部依赖） | `mov`、`mp4`、`matroska`、`webm`、`avi` |
 | Windows x86/x64 | `h264_nvenc`、`hevc_nvenc`、`av1_nvenc`；`h264_amf`、`hevc_amf`、`av1_amf` | 同上 |
 | Windows ARM64 | 仅上述五种软件 encoder；显式禁用 AMF、ffnvcodec/NVENC、NVDEC/CUVID | 同上 |
 | Linux x64 | 上述 NVENC，以及 `h264_vaapi`、`hevc_vaapi`、`vp9_vaapi`、`av1_vaapi` | 同上 |

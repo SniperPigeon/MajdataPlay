@@ -205,6 +205,12 @@ iOS Player 的固定 VideoToolbox 包装器不能检查硬件独占选择，硬�
 
 可独立使用 `FFmpegVideoEncoder` 编码 sRGB RGBA8 缓冲，但其 `Open` / `Encode` / `Complete` / `Dispose` 必须在同一个 owner 线程运行，调用 `Complete()` 后才有完整的输出文件。Mono/IL2CPP 均通过静态 AOT 回调写入 seekable 本地 FileStream，避免 Unicode 路径和覆盖已有文件的问题。
 
+### 音视频合成
+
+`FFmpegCameraCapturer` 只录视频。需要音轨时使用 `FFmpegMediaMuxer.Mux(videoPath, pcm, sampleRate, channels, output, container, token)`：它把已完成的视频文件（如 capturer 写出的 `.mkv`）的首个视频流按包复制（不重新编码），并把交错 32-bit float PCM 作为音轨，按时间戳交错写入 `MediaContainerFormat.MP4` 或 `Matroska`。音轨时间原点与视频原点一致；PCM 为空时输出纯视频。输出流由调用方持有，必须可写且可 seek。
+
+音频编码优先使用 FFmpeg 内置 `aac` encoder（码率 96 kbit/s × 声道数）；加载的原生库没有 AAC encoder 时回退为未压缩 `pcm_s16le`，容器不接受 PCM 时抛出 `NotSupportedException`。2026-10-05 的原生库未启用任何音频 encoder，需按 [Tools/FFmpeg](../../../../Tools/FFmpeg/README.md) 的当前配置重建后才有 AAC。游戏内录制入口是 `MajdataPlay.Recording.FFmpegRecorder`，它组合 capturer 与 `AudioManager.CreateAudioRecorder()` 返回的 Bass 最终输出录音器。
+
 运行时程序集新增对已在项目内使用的 `Unity.RenderPipelines.Core.Runtime` 的引用，用于 URP 正确的最终 Camera 颜色捕获通道；没有新增或升级 Package Manager 包。
 
 ## 验证
