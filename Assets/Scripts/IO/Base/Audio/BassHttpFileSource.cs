@@ -7,7 +7,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -29,20 +28,13 @@ namespace MajdataPlay.IO
     /// callback that races with closing finds nothing instead of dereferencing a freed handle.
     /// </para>
     /// <para>
-    /// The callbacks are static and marked with <see cref="MonoPInvokeCallbackAttribute"/>, and the procedure table is
-    /// passed as a blittable struct of function pointers, as IL2CPP requires for reverse P/Invoke.
+    /// The callbacks are static and marked with <see cref="MonoPInvokeCallbackAttribute"/>, as IL2CPP requires for reverse
+    /// P/Invoke. The procedure table is passed as a blittable <see cref="FileProcedurePointers"/>, so no delegate is marshalled
+    /// back from native code.
     /// </para>
     /// </remarks>
     internal sealed class BassHttpFileSource
     {
-#if UNITY_IOS && !UNITY_EDITOR
-        /// <summary>The BASS library name; iOS links BASS statically.</summary>
-        private const string BassLibrary = "__Internal";
-#else
-        /// <summary>The BASS library name.</summary>
-        private const string BassLibrary = "bass";
-#endif
-
         /// <summary>The sources whose BASS stream may still call back, by the id passed as the callback user data.</summary>
         private static readonly ConcurrentDictionary<int, BassHttpFileSource> s_sources = new ConcurrentDictionary<int, BassHttpFileSource>();
         /// <summary>Roots the close callback for the lifetime of the process.</summary>
@@ -56,13 +48,7 @@ namespace MajdataPlay.IO
         /// <summary>Aborts a source when the creation token is cancelled.</summary>
         private static readonly Action<object?> s_abortOnCancel = state => ((BassHttpFileSource)state!).Abort();
         /// <summary>The native callback table shared by every stream; BASS copies it during creation.</summary>
-        private static readonly NativeFileProcedures s_procedures = new NativeFileProcedures
-        {
-            Close = Marshal.GetFunctionPointerForDelegate(s_closeProcedure),
-            Length = Marshal.GetFunctionPointerForDelegate(s_lengthProcedure),
-            Read = Marshal.GetFunctionPointerForDelegate(s_readProcedure),
-            Seek = Marshal.GetFunctionPointerForDelegate(s_seekProcedure),
-        };
+        private static readonly FileProcedurePointers s_procedures = new FileProcedurePointers(s_closeProcedure, s_lengthProcedure, s_readProcedure, s_seekProcedure);
         /// <summary>The last id handed out; ids start at one so the user data is never null.</summary>
         private static int s_lastId;
 
@@ -165,8 +151,7 @@ namespace MajdataPlay.IO
                 // Disposing the registration waits for a running abort, so no abort can start after this block.
                 using (token.Register(s_abortOnCancel, this))
                 {
-                    var procedures = s_procedures;
-                    stream = BASS_StreamCreateFileUser(StreamSystem.Buffer, flags, ref procedures, new IntPtr(_id));
+                    stream = Bass.CreateStream(StreamSystem.Buffer, flags, s_procedures, new IntPtr(_id));
                     error = Bass.LastError;
                 }
             }
@@ -286,7 +271,7 @@ namespace MajdataPlay.IO
         }
 
         /// <summary>Finds the source identified by BASS callback user data.</summary>
-        /// <param name="user">The user data passed to <see cref="BASS_StreamCreateFileUser"/>.</param>
+        /// <param name="user">The user data passed to <see cref="Bass.CreateStream(StreamSystem, BassFlags, FileProcedurePointers, IntPtr)"/>.</param>
         /// <param name="source">The source, or null when it has been closed.</param>
         /// <returns><see langword="true"/> when the source is still open.</returns>
         private static bool TryGetSource(IntPtr user, [NotNullWhen(true)] out BassHttpFileSource? source)
@@ -348,29 +333,6 @@ namespace MajdataPlay.IO
         private static bool OnSeek(long offset, IntPtr user)
         {
             return false;
-        }
-
-        /// <summary>Creates a user file stream; declared here so the procedure table is passed as plain function pointers.</summary>
-        /// <param name="system">The file system to use.</param>
-        /// <param name="flags">The stream flags.</param>
-        /// <param name="procedures">The callback table, copied by BASS.</param>
-        /// <param name="user">The user data passed to every callback.</param>
-        /// <returns>The stream handle, or zero on failure.</returns>
-        [DllImport(BassLibrary)]
-        private static extern int BASS_StreamCreateFileUser(StreamSystem system, BassFlags flags, ref NativeFileProcedures procedures, IntPtr user);
-
-        /// <summary>The native BASS_FILEPROCS layout.</summary>
-        [StructLayout(LayoutKind.Sequential)]
-        private struct NativeFileProcedures
-        {
-            /// <summary>The FILECLOSEPROC pointer.</summary>
-            public IntPtr Close;
-            /// <summary>The FILELENPROC pointer.</summary>
-            public IntPtr Length;
-            /// <summary>The FILEREADPROC pointer.</summary>
-            public IntPtr Read;
-            /// <summary>The FILESEEKPROC pointer.</summary>
-            public IntPtr Seek;
         }
     }
 }
