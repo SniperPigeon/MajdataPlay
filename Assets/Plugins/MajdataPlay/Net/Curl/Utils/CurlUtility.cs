@@ -33,8 +33,8 @@ namespace MajdataPlay.Net.Curl.Utils
 #if UNITY_ANDROID
             if(File.Exists(_androidCAPath))
             {
-                returnCode = LibCurl.Easy.SetOption(curlEasy.Handle, CurlOption.CaInfo, _androidCAPath);
-                if (returnCode is CurlCode code && code != CurlCode.Ok)
+                var code = LibCurl.Easy.SetOption(curlEasy.Handle, CurlOption.CaInfo, _androidCAPath);
+                if (code != CurlCode.Ok)
                 {
                     MajDebug.LogWarning(
                         $"[libcurl]Failed to set CA certificate bundle. " +
