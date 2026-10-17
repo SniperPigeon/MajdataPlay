@@ -553,7 +553,15 @@ namespace MajdataPlay.IO
                 return AudioSampleWrap.Empty;
             }
         }
-        public async UniTask<AudioSampleWrap> LoadMusicFromUriAsync(Uri uri)
+        /// <summary>Creates a music sample that streams an online audio file with the configured audio backend.</summary>
+        /// <param name="uri">The absolute HTTP or HTTPS address of the audio file.</param>
+        /// <param name="token">Cancels the download and the channel creation; it does not affect the returned sample.</param>
+        /// <returns>The created sample, or <see cref="AudioSampleWrap.Empty"/> when the backend is not supported.</returns>
+        /// <exception cref="OperationCanceledException"><paramref name="token"/> was cancelled.</exception>
+        /// <exception cref="System.Net.Http.HttpRequestException">A BASS backend's request failed or returned an error status code.</exception>
+        /// <exception cref="System.IO.IOException">A BASS backend's download failed before the format could be identified.</exception>
+        /// <exception cref="BassException">BASS could not create the stream.</exception>
+        public async UniTask<AudioSampleWrap> LoadMusicFromUriAsync(Uri uri, CancellationToken token = default)
         {
             MajDebug.LogInfo($"Try creating channel from uri: {uri}");
             await UniTask.SwitchToThreadPool();
@@ -567,10 +575,10 @@ namespace MajdataPlay.IO
                     break;
                 case SoundBackendOption.Asio:
                 case SoundBackendOption.Wasapi:
-                    sample = BassAudioSample.CreateFromUri(uri, BassGlobalMixer);
+                    sample = await BassAudioSample.CreateFromUriAsync(uri, BassGlobalMixer, token);
                     break;
                 case SoundBackendOption.BassSimple:
-                    sample = BassSimpleAudioSample.CreateFromUri(uri);
+                    sample = await BassSimpleAudioSample.CreateFromUriAsync(uri, token);
                     break;
                 default:
                     MajDebug.LogError("Backend not supported");

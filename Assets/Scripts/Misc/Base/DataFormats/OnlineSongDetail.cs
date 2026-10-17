@@ -199,7 +199,7 @@ namespace MajdataPlay
                     }
 
                     var audioManager = MajInstances.AudioManager;
-                    var sample = await audioManager.LoadMusicFromUriAsync(_trackUri);
+                    var sample = await audioManager.LoadMusicFromUriAsync(_trackUri, token);
 
                     _previewAudioTrackRef.SetTarget(sample);
 

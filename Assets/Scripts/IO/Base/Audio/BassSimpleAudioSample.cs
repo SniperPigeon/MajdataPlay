@@ -7,6 +7,7 @@ using ManagedBass;
 using ManagedBass.Fx;
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 #nullable enable
 namespace MajdataPlay.IO
@@ -264,19 +265,45 @@ namespace MajdataPlay.IO
 
             return Create(buf, normalize, speedChange);
         }
+        /// <summary>Creates a sample that streams an online audio file downloaded by <see cref="MajEnv.SharedHttpClient"/>.</summary>
+        /// <param name="uri">The absolute HTTP or HTTPS address of the audio file.</param>
+        /// <returns>A sample that cannot seek beyond the downloaded data.</returns>
+        /// <remarks>Blocks until the response headers and the beginning of the body have arrived; prefer <see cref="CreateFromUriAsync"/>.</remarks>
+        /// <exception cref="OperationCanceledException">The request was cancelled by the client.</exception>
+        /// <exception cref="System.Net.Http.HttpRequestException">The request failed or returned an error status code.</exception>
+        /// <exception cref="System.IO.IOException">The download failed before the format could be identified.</exception>
+        /// <exception cref="BassException">BASS could not create the stream.</exception>
         public static BassSimpleAudioSample CreateFromUri(Uri uri)
         {
-            var stream = Bass.CreateStream(uri.OriginalString, 0, BassFlags.Prescan | BassFlags.AsyncFile, null);
-            MajDebug.LogInfo(stream);
-            MajDebug.LogInfo(Bass.LastError);
-
-            var sample = new BassSimpleAudioSample(stream, 1, false)
+            return CreateFromUriAsync(uri).AsTask().GetAwaiter().GetResult();
+        }
+        /// <summary>Creates a sample that streams an online audio file downloaded by <see cref="MajEnv.SharedHttpClient"/>.</summary>
+        /// <param name="uri">The absolute HTTP or HTTPS address of the audio file.</param>
+        /// <param name="token">Cancels the request and the stream creation; it does not affect the returned sample.</param>
+        /// <returns>A sample that cannot seek beyond the downloaded data.</returns>
+        /// <remarks>BASS reads the beginning of the body on the thread that resumes the request, so call this off the main thread.</remarks>
+        /// <exception cref="OperationCanceledException"><paramref name="token"/> was cancelled or the request was cancelled by the client.</exception>
+        /// <exception cref="System.Net.Http.HttpRequestException">The request failed or returned an error status code.</exception>
+        /// <exception cref="System.IO.IOException">The download failed before the format could be identified.</exception>
+        /// <exception cref="BassException">BASS could not create the stream.</exception>
+        public static async ValueTask<BassSimpleAudioSample> CreateFromUriAsync(Uri uri, CancellationToken token = default)
+        {
+            var stream = await BassHttpFileSource.CreateStreamAsync(MajEnv.SharedHttpClient, uri, BassFlags.Default, token).ConfigureAwait(false);
+            try
             {
-                CanSeek = false,
-            };
-            sample.Volume = 1;
+                var sample = new BassSimpleAudioSample(stream, 1, false)
+                {
+                    CanSeek = false,
+                };
+                sample.Volume = 1;
 
-            return sample;
+                return sample;
+            }
+            catch
+            {
+                Bass.StreamFree(stream);
+                throw;
+            }
         }
     }
 }
