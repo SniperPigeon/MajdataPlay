@@ -195,7 +195,7 @@ namespace MajdataPlay.Recording
                 var drainOutput = audioOutput;
                 audioOutput = null;
                 _audioDrainStop = drainStop;
-                _audioDrainTask = Task.Run(() => DrainAudioAsync(drainOutput, drainStop.Token));
+                _audioDrainTask = Task.Factory.StartNew(() => DrainAudioAsync(drainOutput, drainStop.Token), TaskCreationOptions.LongRunning);
                 _files = files;
                 _state = RecorderState.Recording;
                 MajDebug.LogInfo(nameof(FFmpegRecorder), $"Recording {_capturer.Width}x{_capturer.Height}@{_capturer.FrameRate} "
@@ -320,16 +320,14 @@ namespace MajdataPlay.Recording
             var samples = new float[Math.Max(1, _audioRecorder.SampleRate / AudioDrainBufferDivisor) * _audioRecorder.Channels];
             using (output)
             {
+                var waitHandle = stopToken.WaitHandle;
                 while (!stopToken.IsCancellationRequested)
                 {
                     WriteAvailableAudio(output, samples);
-                    try
-                    {
-                        await Task.Delay(AudioDrainIntervalMilliseconds, stopToken);
-                    }
-                    catch (OperationCanceledException)
+                    if (waitHandle.WaitOne(AudioDrainIntervalMilliseconds))
                     {
                         // Stopping is the normal exit; the final drain below collects the remaining samples.
+                        break;
                     }
                 }
                 WriteAvailableAudio(output, samples);
