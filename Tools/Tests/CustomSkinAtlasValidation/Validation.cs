@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Cysharp.Threading.Tasks;
+using MajdataPlay.IO.Storage;
 using MajdataPlay.Scenes.Game.Notes.Skins;
 using UnityEditor;
 using UnityEngine;
@@ -127,13 +128,13 @@ namespace CustomSkinAtlasValidation
         /// <exception cref="InvalidOperationException">A check fails.</exception>
         private static async UniTask CheckEmptyInput()
         {
-            var empty = new AtlasBuilder(Application.dataPath);
+            var empty = new AtlasBuilder(FileSystem.Directory.Open(Application.dataPath));
             Check(empty.BuildAndAssign() == null, "Synchronous empty input returns null.");
             Check(await empty.BuildAndAssignAsync() == null, "Asynchronous empty input returns null.");
             foreach (var asynchronous in new[] { false, true })
             {
                 var assignments = 0;
-                var missing = new AtlasBuilder(Application.dataPath);
+                var missing = new AtlasBuilder(FileSystem.Directory.Open(Application.dataPath));
                 missing.Add("not-present.png", sprite =>
                 {
                     Check(sprite == null, "Missing input assigns null.");
@@ -161,7 +162,7 @@ namespace CustomSkinAtlasValidation
             DeviceCapabilities.QueryCount = 0;
             var sprites = new List<Sprite>();
             var border = new Vector4(8, 2, 32, 4);
-            var builder = new AtlasBuilder(Path.GetDirectoryName(sourcePath)!, 1f, 1f, 30);
+            var builder = new AtlasBuilder(FileSystem.Directory.Open(Path.GetDirectoryName(sourcePath)!), 1f, 1f, 30);
             for (var i = 0; i < 5; i++)
             {
                 builder.Add(Path.GetFileName(sourcePath), sprite =>
@@ -174,7 +175,7 @@ namespace CustomSkinAtlasValidation
             Texture2D? atlas = null;
             var expectedGeometryErrors = 0;
             string? unexpectedError = null;
-            var expectedMessage = $"Not allowed to override geometry on sprite '{sourcePath}'";
+            var expectedMessage = $"Not allowed to override geometry on sprite '{Path.GetFileName(sourcePath)}'";
             Application.LogCallback captureErrors = (message, stackTrace, type) =>
             {
                 if (type == LogType.Error && message == expectedMessage)
@@ -191,7 +192,10 @@ namespace CustomSkinAtlasValidation
             {
                 atlas = asynchronous ? await builder.BuildAndAssignAsync() : builder.BuildAndAssign();
                 Check(unexpectedError == null, $"Unexpected Unity error: {unexpectedError}");
-                Check(expectedGeometryErrors == 5, "Each sprite reproduces the existing Editor OverrideGeometry error.");
+                // The Editor rejects some custom outlines with this error and keeps the full rectangle; a player applies them.
+                Check(expectedGeometryErrors == 0 || expectedGeometryErrors == 5,
+                    "Each sprite either applies its outline or reproduces the existing Editor OverrideGeometry error.");
+                var outlineApplied = expectedGeometryErrors == 0;
                 Check(atlas != null, "Non-empty input returns an atlas.");
                 if (!s_baseline)
                 {
@@ -213,8 +217,20 @@ namespace CustomSkinAtlasValidation
                     Near(sprite.border.y, sourceBorder.y * rect.height / SourceHeight, "Bottom border follows packed height.");
                     Near(sprite.border.z, sourceBorder.z * rect.width / sourceWidth, "Right border follows packed width.");
                     Near(sprite.border.w, sourceBorder.w * rect.height / SourceHeight, "Top border follows packed height.");
-                    Near(sprite.bounds.size.x, rect.width / sprite.pixelsPerUnit, "Existing Editor fallback retains the packed width.");
-                    Near(sprite.bounds.size.y, rect.height / sprite.pixelsPerUnit, "Existing Editor fallback retains the packed height.");
+                    if (outlineApplied)
+                    {
+                        var trimmedWidth = rect.width * (1f - 2f * HorizontalMargin / sourceWidth);
+                        var trimmedHeight = rect.height * (1f - 2f * VerticalMargin / SourceHeight);
+                        // Bounds keep the full rectangle; the mesh vertices carry the applied outline.
+                        var extent = MeshExtent(sprite);
+                        Near(extent.x, trimmedWidth / sprite.pixelsPerUnit, "The applied outline trims the transparent horizontal margins.");
+                        Near(extent.y, trimmedHeight / sprite.pixelsPerUnit, "The applied outline trims the transparent vertical margins.");
+                    }
+                    else
+                    {
+                        Near(sprite.bounds.size.x, rect.width / sprite.pixelsPerUnit, "Existing Editor fallback retains the packed width.");
+                        Near(sprite.bounds.size.y, rect.height / sprite.pixelsPerUnit, "Existing Editor fallback retains the packed height.");
+                    }
                     Check(sprite.triangles.Length >= 6, "The sprite retains rectangle triangle indices.");
                     if (sourceWidth > limit)
                     {
@@ -235,6 +251,24 @@ namespace CustomSkinAtlasValidation
                     Object.DestroyImmediate(atlas);
                 }
             }
+        }
+
+        /// <summary>
+        /// Measures the size of a sprite's mesh in world units.
+        /// </summary>
+        /// <param name="sprite">The sprite.</param>
+        /// <returns>The width and height spanned by the mesh vertices.</returns>
+        private static Vector2 MeshExtent(Sprite sprite)
+        {
+            var vertices = sprite.vertices;
+            var minimum = vertices[0];
+            var maximum = vertices[0];
+            foreach (var vertex in vertices)
+            {
+                minimum = Vector2.Min(minimum, vertex);
+                maximum = Vector2.Max(maximum, vertex);
+            }
+            return maximum - minimum;
         }
 
         /// <summary>

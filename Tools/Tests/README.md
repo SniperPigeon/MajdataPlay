@@ -141,3 +141,18 @@ and use the system picker to choose only a disposable scratch directory.
 Repeat full/replay/release with `-Install -Abi armeabi-v7a` to verify an actual
 32-bit process. Release only grants newly acquired by the dedicated test app;
 never clear another application's data or delete the selected parent directory.
+
+## CustomSkin loading memory and atlas layout
+
+```powershell
+dotnet run --project Tools/Tests/AtlasLayoutValidation/AtlasLayoutValidation.csproj
+./Tools/Tests/CustomSkinMemoryValidation/run.ps1 -Player
+./Tools/Tests/CustomSkinAtlasValidation/run.ps1
+```
+
+`AtlasLayoutValidation` checks the atlas packer arithmetic without Unity.
+`CustomSkinMemoryValidation` loads a real skin (default `Assets/StreamingAssets/Skins/default`)
+through the production `CustomSkin` and real SkiaSharp in an isolated Editor or standalone
+Windows player and fails when the sampled memory peak exceeds `-BudgetMiB` (default 1024).
+`CustomSkinAtlasValidation` checks atlas limits, borders and sprite assignment under simulated
+device texture limits. See each directory's README for what is and is not covered.

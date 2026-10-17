@@ -57,6 +57,23 @@ New-Item -ItemType Directory -Force -Path $storageTarget | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $root 'Assets/Plugins/MajdataPlay/IO/Storage') -File -Filter '*.cs' |
     Copy-Item -Destination $storageTarget -Force
 
+# The atlas decodes its sources with the real SkiaSharp binding (compiled from source for this
+# project's API profile) and its Windows x64 native library.
+$skiaTarget = Join-Path $assets 'SkiaSharp'
+New-Item -ItemType Directory -Force -Path $skiaTarget | Out-Null
+Get-ChildItem -LiteralPath (Join-Path $root 'Assets/Plugins/SkiaForUnity/SkiaSharp-Bindings') -File |
+    Where-Object { $_.Extension -in @('.cs', '.asmdef') } | Copy-Item -Destination $skiaTarget -Force
+$nativeTarget = Join-Path $assets 'Plugins/x86_64'
+New-Item -ItemType Directory -Force -Path $nativeTarget | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'Assets/Plugins/SkiaForUnity/Library/win-x64/libSkiaSharp.dll') -Destination $nativeTarget
+foreach ($source in @('Assets/Scripts/Scenes/Game/Misc/Notes/Skins/AtlasLayout.cs', 'Assets/Plugins/MajdataPlay/Drawing/DecodedImage.cs',
+    'Assets/Plugins/MajdataPlay/Drawing/EncodedImage.cs')) {
+    $sourcePath = Join-Path $root $source
+    if (Test-Path -LiteralPath $sourcePath) {
+        Copy-Item -LiteralPath $sourcePath -Destination $assets
+    }
+}
+
 # Alias only the device capability query in the isolated copy. The AtlasBuilder,
 # Texture2D constructor, PackTextures, border scaling and mesh code stay intact.
 if ($Baseline) {

@@ -9,8 +9,10 @@ Run the isolated Unity check with the Editor version specified by the repository
 ./Tools/Tests/CustomSkinAtlasValidation/run.ps1 -Baseline
 ```
 
-The script stages the current, complete production `CustomSkin.cs`, portable storage sources and real UniTask
-runtime in `Temp/CustomSkinAtlasValidation`. It uses cached Burst, Collections and
+The script stages the current, complete production `CustomSkin.cs` with `AtlasLayout.cs` and
+`DecodedImage.cs`/`EncodedImage.cs`, portable storage sources, the real SkiaSharp binding (compiled from
+`Assets/Plugins/SkiaForUnity/SkiaSharp-Bindings`) with its Windows x64 native library, and the real
+UniTask runtime in `Temp/CustomSkinAtlasValidation`. It uses cached Burst, Collections and
 Mathematics packages, plus Unity's built-in Vector Graphics module. No main-project
 scene or Player setting is opened or modified. A graphics device is required:
 the script deliberately omits `-nographics`. The selected API must be available on
@@ -25,12 +27,14 @@ asynchronous paths check atlas
 dimensions, device-limit lookup, sprite assignment, scaled borders, sprite
 rectangles, shared texture ownership and release of atlas CPU pixel data.
 Four inputs use zero borders and transparent margins; one input uses nonzero
-borders to check their scale. In this isolated Editor environment, all five
-sprites emit `Not allowed to override geometry on sprite` and retain their full
-rectangles. Each case expects exactly these five messages with the source's full
-path and fails on any other Unity error observed while packing. This existing
-Editor behavior is outside the atlas-size repair; applied custom outline geometry
-is **not verified** by this tool.
+borders to check their scale. In this isolated Editor environment the sprites either
+all emit `Not allowed to override geometry on sprite` and retain their full rectangles,
+or all accept their custom outline (observed for the first case of a run). Each case
+accepts exactly zero or five of these messages and fails on any other Unity error
+observed while packing. When the outline is applied, the mesh vertices must trim the
+fixture's transparent margins exactly; otherwise the full-rectangle fallback is checked.
+The Editor error is pre-existing; a Windows player built by
+`Tools/Tests/CustomSkinMemoryValidation/run.ps1 -Player` logs none for the default skin.
 
 `-Baseline` stages the committed `HEAD` version of `CustomSkin.cs` and runs one
 synchronous fixture through the same packing, border and expected-error checks.
@@ -46,11 +50,12 @@ The larger-limit cases use this same narrow fixture; they do not allocate a
 limits do not change the host driver's actual constructor checks. Cases whose
 effective atlas ceiling exceeds the host's real limit are skipped and logged.
 
-Narrow service substitutes supply a disposable list/array pool, Unity PNG decoding
-in place of Skia, logging and the unused skin preload service. The production
+Narrow service substitutes supply a disposable list/array pool, Unity PNG decoding for the
+independent-sprite `TextureLoader` (not exercised here), logging and the unused skin preload service. The production
 packing, border scaling, outline extraction and triangulation remain intact.
 This validates the atlas path in the Editor with the selected desktop graphics
-API; it does **not** validate Skia decoding, complete skin loading, rendered output,
+API; atlas sources are decoded by the real Skia path; it does **not** validate complete skin loading or memory use
+(see `Tools/Tests/CustomSkinMemoryValidation`), rendered output,
 Android/OpenGLES, other target architectures, hardware limits or allocation failure.
 
 Success is marked by `CUSTOM_SKIN_ATLAS_VALIDATION_PASSED` in
