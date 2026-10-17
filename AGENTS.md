@@ -65,12 +65,13 @@ MajdataPlay 是一个跨平台 Simai 谱面播放器，也是一个 Unity 项目
 - 平台实现应留在相应 Platform 目录或平台受限 `.asmdef` 中，并保留 Editor 可编译性。不要用单一平台的成功掩盖其他平台分支的编译问题。
 - 所有成员均需添加英文XML文档（Unity message方法非必要可以不添加），文档应说明成员的用途；如果方法有参数，应当说明各个参数的用途；如果方法有返回值，应当说明方法会返回什么；如果方法有可能抛出异常，文档也应当列出可能的异常类型。
 - Android开发时，如果需要编写Java C# wrapper，请使用项目内的Tools/CSharp/AndroidJavaWrapperGenerator生成器生成wrapper；并更新`Assets/Plugins/MajdataPlay/Platform/Android`下的wrapper dll和xml文档。
+- 应使用`MajdataPlay.IO.Storage.FileSystem`进行文件/目录访问，禁止使用`System.IO`进行文件/目录访问。
 
 ## 日志输出
 
 - 应根据`Debug`、`Info`、`Warning`、`Error`4个等级，在合适的位置进行日志输出。
-- `tag`形参指进行输出的类、组件或类别，比如`AudioManager`中输出日志，`tag`应为`[Audio]`；网络类的日志输出`tag`应该为`[Network]`；FFmpeg中的解码器日志输出`tag`为`[FFmpeg][Decoder]`。
-- 如果是特定类的日志输出，那么应当使用`nameof`避免硬编码类名，比如`tag`为`[nameof(T)]`。
+- `tag`形参指进行输出的类、组件或类别，比如`AudioManager`中输出日志，`tag`应为`Audio`；网络类的日志输出`tag`应该为`Network`；FFmpeg中的解码器日志输出`tag`为`FFmpeg`，`message`带前缀`[Decoder]`。
+- 如果是特定类的日志输出，那么应当使用`nameof`避免硬编码类名，比如`tag`为`nameof(T)`。
 
 ## C#工具集代码约定
 
