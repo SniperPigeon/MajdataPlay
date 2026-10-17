@@ -11,6 +11,12 @@
       },
       "hash": "ab6e92bfe78ff911def2fd3c4e9c79bb5a186946"
     },
+    "com.cysharp.unitask": {
+      "version": "file:../ThirdParty/UniTask/src/UniTask/Assets/Plugins/UniTask",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {}
+    },
     "com.gilzoide.sqlite-net": {
       "version": "https://github.com/gilzoide/unity-sqlite-net.git#1.3.2",
       "depth": 0,
