@@ -468,6 +468,23 @@ Windows 使用对应 x86/x64 MinGW 编译器和 import libraries，运行时选�
 
 Android 使用对应 ARMv7/ARM64 NDK 编译器，保持与原生库相同 API/ABI；将测试程序、两个素材及同架构 `.so` 推到独立 `/data/local/tmp/` 测试目录，通过该目录的 `LD_LIBRARY_PATH` 运行，无需安装或替换正式应用。该检查验证原生库的软件解码与像素转换，不验证 Unity 生命周期、托管 ABI、纹理显示或硬件解码；动态库搜索路径的独立验证仍使用下面的 Linux 测试。
 
+### 跨平台原生音频编解码检查
+
+`AudioCodecSmoke.c` 使用实际交付库执行 35 组 48 kHz 双声道编码→解码往返：AAC、Opus（分别使用内置与 libopus decoder）、MP3（定点与浮点 decoder），以及 30 种 PCM。输入左右声道分别为 440 Hz / 880 Hz；检查采样率、声道、样本数量、有限值、波形频率/幅度/能量、声道串扰、编码器与解码器排空及稳定 EOF。另将 AAC/ADTS、Opus/Ogg、MP3、PCM/WAV 实际封装后重新解封装，检查音轨身份与数据包。VIDC 的上游压扩表产生失真，因此只检查该旧式入口注册，不能将其记为波形验证通过。
+
+输出目录必须已存在，且没有同名测试文件；程序拒绝覆盖。原生库与头文件必须来自本次固定构建，不使用系统 FFmpeg。
+
+```bash
+cc -std=c11 -Wall -Wextra -Werror -I"$ffmpeg_prefix/include" \
+  Tools/Tests/FFmpegValidation/AudioCodecSmoke.c \
+  -L"$ffmpeg_prefix/lib" -Wl,-rpath,"$ffmpeg_prefix/lib" \
+  -lavformat -lavcodec -lswresample -lavutil -lm -o /tmp/audio-codec-smoke
+mkdir -p /tmp/new-audio-codec-output
+/tmp/audio-codec-smoke /tmp/new-audio-codec-output
+```
+
+Linux 交付目录使用版本化库名：`-l:libavformat.so.63 -l:libavcodec.so.63 -l:libswresample.so.7 -l:libavutil.so.61`。Windows 使用对应架构的 MinGW 和 import libraries，将测试程序放在本次 staged DLL 同目录；macOS 将程序放到 staged dylib 同目录，以匹配 `@loader_path`。Android 使用相同 ABI 的 NDK 编译并在设备上执行。iOS device/simulator 链接 stage 后已合并外部 codec 的静态归档以及 Apple 系统框架；Simulator 签名后由 `simctl spawn` 运行。编译外架构测试程序不等于已执行；本测试不验证扬声器、麦克风、Unity 音频或实时录制吞吐。结果见 `Tools/FFmpeg/AUDIO-RESULTS.md`。
+
 ### 跨平台原生录制检查
 
 [EncoderNativeSmoke.c](EncoderNativeSmoke.c) 是不依赖 Unity 的 C11 录制检查。使用同架构的固定 FFmpeg 头文件和库编译，输出目录需提前创建且不含已有同名录制文件：

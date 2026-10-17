@@ -118,13 +118,30 @@ Linux/Android 默认没有外部 TLS 后端，支持本地文件和 HTTP；HTTPS
 
 | 录制目标 | 显式启用的 encoder | 显式启用的 muxer |
 | --- | --- | --- |
-| 全部平台 | `libx264`（H.264）、`libx265`（HEVC/H.265）、`libvpx-vp9`（VP9）、`libaom-av1`（AV1）、`mpeg4` 软件编码（CBR/VBR）；MPEG4 构建依赖会额外启用 `h263`；FFmpeg 内置 `aac` 音频编码（录制音轨，无外部依赖） | `mov`、`mp4`、`matroska`、`webm`、`avi` |
+| 全部平台 | `libx264`（H.264）、`libx265`（HEVC/H.265）、`libvpx-vp9`（VP9）、`libaom-av1`（AV1）、`mpeg4` 软件编码（CBR/VBR）；MPEG4 构建依赖会额外启用 `h263`；音频提供 `aac`、`libopus`、`libmp3lame` 和 31 种通用 `pcm_*` encoder | `mov`、`mp4`、`matroska`、`webm`、`avi`、`adts`、`latm`、`ogg`、`opus`、`mp3`、`wav` |
 | Windows x86/x64 | `h264_nvenc`、`hevc_nvenc`、`av1_nvenc`；`h264_amf`、`hevc_amf`、`av1_amf` | 同上 |
-| Windows ARM64 | 仅上述五种软件 encoder；显式禁用 AMF、ffnvcodec/NVENC、NVDEC/CUVID | 同上 |
+| Windows ARM64 | 上述软件视频和音频 encoder；显式禁用 AMF、ffnvcodec/NVENC、NVDEC/CUVID | 同上 |
 | Linux x64 | 上述 NVENC，以及 `h264_vaapi`、`hevc_vaapi`、`vp9_vaapi`、`av1_vaapi` | 同上 |
 | macOS / iOS | `h264_videotoolbox` | 同上 |
 
 Android 同样提供这四种软件编码器。编码器选择失败可以在同一格式内回退，不能悄悄把请求的 H.264 改为 MPEG-4。容器也必须支持选择的编码，比如 WebM 不接受 MPEG-4/H.264。
+
+### 音频编解码
+
+全部 11 个构建目标使用相同的音频配置：
+
+| 格式 | encoder | 必需 decoder | 常用输出容器 |
+| --- | --- | --- | --- |
+| AAC | FFmpeg 内置 `aac`（不要求 experimental 模式） | `aac`、`aac_fixed`、`aac_latm` | ADTS / LATM / MP4 / Matroska |
+| Opus | `libopus` | 内置 `opus` 与 `libopus` | Ogg / Opus / WebM / Matroska |
+| MP3 | `libmp3lame` | `mp3`、`mp3float` | MP3 / Matroska |
+| PCM | 31 种 `pcm_*`，完整名称见 `build.py:pcm_encoders()` | 对应内置 `pcm_*` | WAV / MOV / Matroska，按具体采样格式选择 |
+
+PCM 包含 8/16/24/32/64-bit 整数、32/64-bit 浮点、大小端、平面格式，以及 A-law、mu-law、DVD、Blu-ray、D-Cinema 等实现；容器不一定支持每种变体。旧式 Archimedes `pcm_vidc` 入口也存在，但固定 FFmpeg 的编码压扩表在实际往返测试中产生波形失真，只验证注册，不作为通过音质验证的 PCM 实现。
+
+`dependencies.lock.json` 的 `audioCodecs` 固定官方 Opus 1.6.1 与 LAME 3.100 源码压缩包和 SHA256。源码逐文件核对并拒绝额外文件，构建在独立目录进行；两库均使用目标编译器/SDK 构建 PIC 静态库并链接进 avcodec，不增加运行时 DLL/so/dylib。iOS 将两个静态归档一起合入 `libavcodec.a`。Opus 的 DRED/OSCE 扩展关闭；Windows ARM64 因上游 MinGW ARM CPU 检测及 NEON CMake 兼容问题使用 Opus 的通用 C 实现。
+
+交付的 `opus.LICENSE.txt`、`lame.LICENSE.txt` 保留完整声明和来源哈希；清单的 `audioCodecBuilds` 记录来源、目标构建参数及静态归档哈希，`recordingProfile.audioDecoders` 记录必需 decoder。配置检查和产物审计缺少任一音频 encoder、decoder、muxer 或依赖声明都会失败。原生往返测试与本次平台验证结果见 [音频验证记录](AUDIO-RESULTS.md)。这些是原生库能力，当前 `FFmpegVideoPlayer` 不输出音频，Camera 录制组件也不会因此自动采集音轨。
 
 固定依赖为 x264 API 165（stable commit `b35605ace3ddf7c1a5d67a2eb553f034aef41d55`）、x265 4.1、libvpx 1.17.0、libaom 3.13.3；精确 commit、官方仓库与许可证文件见 `dependencies.lock.json`。构建不生成依赖的命令行工具或测试程序，不安装系统软件。源码版本或本地 tracked 内容不匹配时拒绝复用缓存。
 当前 ARM 配置中，libvpx/libaom 使用通用 C 后端，x265 关闭 ARM 汇编扩展，x264 保留 ARM 汇编；这保证兼容性，录制分辨率下的实时吞吐仍需在目标设备测量。

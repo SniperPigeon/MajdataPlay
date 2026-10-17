@@ -4,6 +4,10 @@
     "repository": "https://github.com/FFmpeg/FFmpeg.git",
     "tag": "n9.0.1",
     "commit": "bf1b838f2ab88b4f8fd83443325c782ea0e0f7fa",
+    "licenseSha256": {
+      "COPYING.GPLv2": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "COPYING.GPLv3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
     "abi": {
       "avcodec": 63,
       "avdevice": 63,
@@ -16,8 +20,8 @@
     "bindingHeaders": "ThirdParty/FFmpeg.AutoGen/FFmpeg/include",
     "note": "All upstream public headers present in the binding header snapshot are compared after CRLF normalization before building. Generated avconfig.h and ffversion.h are excluded."
   },
-  "host": "Linux-6.18.40.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
-  "builtUtc": "2026-10-05T12:47:06.706443+00:00",
+  "host": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "builtUtc": "2026-10-17T13:58:06.091730+00:00",
   "configure": [
     "--prefix=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/install/linux-x64",
     "--disable-doc",
@@ -36,8 +40,8 @@
     "--disable-decoder=adpcm_circus,adpcm_ima_escape,adpcm_ima_hvqm2,adpcm_ima_hvqm4,adpcm_ima_magix,adpcm_ima_pda,adpcm_n64,adpcm_psxc,ahx",
     "--disable-parser=ahx",
     "--disable-bsf=ahx_to_mp2",
-    "--enable-encoder=mpeg4,libx264,libx265,libvpx_vp9,libaom_av1,h264_nvenc,hevc_nvenc,av1_nvenc,h264_vaapi,hevc_vaapi,vp9_vaapi,av1_vaapi",
-    "--enable-muxer=mov,mp4,matroska,webm,avi",
+    "--enable-encoder=mpeg4,libx264,libx265,libvpx_vp9,libaom_av1,aac,libopus,libmp3lame,pcm_alaw,pcm_bluray,pcm_dvd,pcm_f32be,pcm_f32le,pcm_f64be,pcm_f64le,pcm_mulaw,pcm_s8,pcm_s8_planar,pcm_s16be,pcm_s16be_planar,pcm_s16le,pcm_s16le_planar,pcm_s24be,pcm_s24daud,pcm_s24le,pcm_s24le_planar,pcm_s32be,pcm_s32le,pcm_s32le_planar,pcm_s64be,pcm_s64le,pcm_u8,pcm_u16be,pcm_u16le,pcm_u24be,pcm_u24le,pcm_u32be,pcm_u32le,pcm_vidc,h264_nvenc,hevc_nvenc,av1_nvenc,h264_vaapi,hevc_vaapi,vp9_vaapi,av1_vaapi",
+    "--enable-muxer=mov,mp4,matroska,webm,avi,adts,latm,ogg,opus,mp3,wav",
     "--enable-shared",
     "--disable-static",
     "--target-os=linux",
@@ -61,45 +65,50 @@
     "--enable-libvpx",
     "--enable-libaom",
     "--disable-decoder=libvpx_vp8,libvpx_vp9,libaom_av1",
-    "--pkg-config=sh /home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-d5f56b6c2b44/pkg-config.sh",
+    "--pkg-config=sh /home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-6bed58691fb0/pkg-config.sh",
     "--extra-ldflags=-Wl,--exclude-libs,ALL",
-    "--extra-ldflags=-static-libstdc++"
+    "--extra-ldflags=-static-libstdc++",
+    "--enable-libopus",
+    "--enable-libmp3lame",
+    "--extra-cflags=-I/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/audio-linux-x64-4b6610e8f60a/lame/install/include",
+    "--extra-ldflags=-L/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/audio-linux-x64-4b6610e8f60a/lame/install/lib",
+    "--pkg-config=sh /home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/audio-linux-x64-4b6610e8f60a/pkg-config.sh"
   ],
   "files": [
     {
       "file": "libavcodec.so.63",
-      "bytes": 34420433,
-      "sha256": "bf5bcaf7d692b949675708608aaddc445674f2a8dd0c45f6d672876949ef8717"
+      "bytes": 35333929,
+      "sha256": "10567ade10d2da0abdee6d814776fe35434406345c0aaa91918c70e8211ac474"
     },
     {
       "file": "libavdevice.so.63",
-      "bytes": 17993,
-      "sha256": "86d9fddd278b9cddbabb51502951f0f0ac3bb23323adc0d62694f55ddc44e719"
+      "bytes": 22089,
+      "sha256": "55fa17667ffad344ec6ba88158ed4f4674382be65ff44fde38e58dd10dbc9210"
     },
     {
       "file": "libavfilter.so.12",
       "bytes": 152713,
-      "sha256": "f3867c2cc5a0e8a3a9a7a50e2b9fb0a160f0323d8ad47e036e89bd37585b6ffe"
+      "sha256": "f47af43a0551e3ca19316e92bbd2c958016e25e83df5e27139228589ba3bce14"
     },
     {
       "file": "libavformat.so.63",
-      "bytes": 2384929,
-      "sha256": "3738d8c9354af7f744016f39b5fed7222c7588125fd37300c5a9f8972d1acadc"
+      "bytes": 2430009,
+      "sha256": "fa0137f56144405eb9d691b670b864745ec01b366515ee68873771283bab134c"
     },
     {
       "file": "libavutil.so.61",
       "bytes": 1208137,
-      "sha256": "a38d0abf15a197839742001a144a0a0f66a2c3c67ab0636d9a152f3d652cd68b"
+      "sha256": "7b18189319d5a734803d6d56d1570b8fc9ccdedd54a2e0d96067ff9da6fef5ff"
     },
     {
       "file": "libswresample.so.7",
       "bytes": 145513,
-      "sha256": "853da8358f853799cb6f95278f0424f5f820843f2cc0d1ef18d897a3a0fa4a9e"
+      "sha256": "c3d2a915cef10ce616d32668cd96c40c52ad4e840e045da75aa8c95598996efe"
     },
     {
       "file": "libswscale.so.10",
       "bytes": 2154177,
-      "sha256": "700326d025e0f4a3e845fa3bef57720cb3986f9ef44900519bdeb72c9c3109f8"
+      "sha256": "83fb4e421d7e32ab61768ef712547393e8d09de651065c6b29e0f77b76a41114"
     }
   ],
   "softwareDecoders": [
@@ -112,6 +121,40 @@
       "libx265",
       "libvpx-vp9",
       "libaom-av1",
+      "aac",
+      "libopus",
+      "libmp3lame",
+      "pcm_alaw",
+      "pcm_bluray",
+      "pcm_dvd",
+      "pcm_f32be",
+      "pcm_f32le",
+      "pcm_f64be",
+      "pcm_f64le",
+      "pcm_mulaw",
+      "pcm_s8",
+      "pcm_s8_planar",
+      "pcm_s16be",
+      "pcm_s16be_planar",
+      "pcm_s16le",
+      "pcm_s16le_planar",
+      "pcm_s24be",
+      "pcm_s24daud",
+      "pcm_s24le",
+      "pcm_s24le_planar",
+      "pcm_s32be",
+      "pcm_s32le",
+      "pcm_s32le_planar",
+      "pcm_s64be",
+      "pcm_s64le",
+      "pcm_u8",
+      "pcm_u16be",
+      "pcm_u16le",
+      "pcm_u24be",
+      "pcm_u24le",
+      "pcm_u32be",
+      "pcm_u32le",
+      "pcm_vidc",
       "h264_nvenc",
       "hevc_nvenc",
       "av1_nvenc",
@@ -125,7 +168,53 @@
       "mp4",
       "matroska",
       "webm",
-      "avi"
+      "avi",
+      "adts",
+      "latm",
+      "ogg",
+      "opus",
+      "mp3",
+      "wav"
+    ],
+    "audioDecoders": [
+      "aac",
+      "aac_fixed",
+      "aac_latm",
+      "opus",
+      "libopus",
+      "mp3",
+      "mp3float",
+      "pcm_alaw",
+      "pcm_bluray",
+      "pcm_dvd",
+      "pcm_f32be",
+      "pcm_f32le",
+      "pcm_f64be",
+      "pcm_f64le",
+      "pcm_mulaw",
+      "pcm_s8",
+      "pcm_s8_planar",
+      "pcm_s16be",
+      "pcm_s16be_planar",
+      "pcm_s16le",
+      "pcm_s16le_planar",
+      "pcm_s24be",
+      "pcm_s24daud",
+      "pcm_s24le",
+      "pcm_s24le_planar",
+      "pcm_s32be",
+      "pcm_s32le",
+      "pcm_s32le_planar",
+      "pcm_s64be",
+      "pcm_s64le",
+      "pcm_u8",
+      "pcm_u16be",
+      "pcm_u16le",
+      "pcm_u24be",
+      "pcm_u24le",
+      "pcm_u32be",
+      "pcm_u32le",
+      "pcm_vidc"
     ]
   },
   "buildDependencies": {
@@ -180,6 +269,26 @@
           "file": "llvm-mingw-20260922-ucrt-x86_64.zip",
           "sha256": "e3ad77d117a4bea19a7a3b333341824d79a5a371004a10e25b8504e7b3047666"
         }
+      }
+    },
+    "audioCodecs": {
+      "opus": {
+        "version": "1.6.1",
+        "url": "https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz",
+        "sha256": "6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1",
+        "license": "BSD-3-Clause",
+        "licenseFiles": [
+          "COPYING"
+        ]
+      },
+      "lame": {
+        "version": "3.100",
+        "url": "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz",
+        "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e",
+        "license": "LGPL-2.0-or-later",
+        "licenseFiles": [
+          "COPYING"
+        ]
       }
     },
     "softwareEncoders": {
@@ -251,7 +360,7 @@
         ]
       },
       "configure": [
-        "--prefix=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-d5f56b6c2b44/x264/install",
+        "--prefix=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-6bed58691fb0/x264/install",
         "--host=x86_64-linux-gnu",
         "--enable-static",
         "--enable-pic",
@@ -288,7 +397,7 @@
         "-S",
         "/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/x265-1d117bed4747/source",
         "-B",
-        "/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-d5f56b6c2b44/x265/build",
+        "/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-6bed58691fb0/x265/build",
         "-G",
         "Ninja",
         "-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja",
@@ -299,15 +408,15 @@
         "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
         "-DCMAKE_SYSTEM_PROCESSOR=x86_64",
         "-DCMAKE_SYSTEM_NAME=Linux",
-        "-DCMAKE_C_COMPILER=/usr/bin/x86_64-linux-gnu-gcc-13",
-        "-DCMAKE_CXX_COMPILER=/usr/bin/x86_64-linux-gnu-g++-13",
-        "-DCMAKE_AR=/usr/bin/x86_64-linux-gnu-ar",
-        "-DCMAKE_RANLIB=/usr/bin/x86_64-linux-gnu-ranlib",
+        "-DCMAKE_C_COMPILER=/usr/bin/cc",
+        "-DCMAKE_CXX_COMPILER=/usr/bin/c++",
+        "-DCMAKE_AR=/usr/bin/ar",
+        "-DCMAKE_RANLIB=/usr/bin/ranlib",
         "-DCMAKE_C_FLAGS=-I/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/Vulkan-Headers-vulkan-sdk-1.4.328.1/include",
         "-DCMAKE_CXX_FLAGS=-I/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/Vulkan-Headers-vulkan-sdk-1.4.328.1/include",
         "-DCMAKE_EXE_LINKER_FLAGS=",
         "-DCMAKE_SHARED_LINKER_FLAGS=",
-        "-DCMAKE_INSTALL_PREFIX=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-d5f56b6c2b44/x265/install",
+        "-DCMAKE_INSTALL_PREFIX=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-6bed58691fb0/x265/install",
         "-DENABLE_SHARED=OFF",
         "-DENABLE_CLI=OFF",
         "-DENABLE_PIC=ON",
@@ -356,7 +465,7 @@
         ]
       },
       "configure": [
-        "--prefix=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-d5f56b6c2b44/libvpx/install",
+        "--prefix=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-6bed58691fb0/libvpx/install",
         "--target=x86_64-linux-gcc",
         "--enable-pic",
         "--enable-static",
@@ -374,7 +483,7 @@
       ],
       "archive": "libvpx.a",
       "bytes": 2472338,
-      "sha256": "e26b83e2021e012981fd249ad4e7cb781ecc99980317842fa98234e7d7540eb1",
+      "sha256": "facb021abe35864b94287522b186485f90c0028651b18417923b210de316b453",
       "static": true,
       "pic": true
     },
@@ -400,7 +509,7 @@
         "-S",
         "/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/libaom-92d4c37fbdd0",
         "-B",
-        "/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-d5f56b6c2b44/libaom/build",
+        "/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-6bed58691fb0/libaom/build",
         "-G",
         "Ninja",
         "-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja",
@@ -411,15 +520,15 @@
         "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
         "-DCMAKE_SYSTEM_PROCESSOR=x86_64",
         "-DCMAKE_SYSTEM_NAME=Linux",
-        "-DCMAKE_C_COMPILER=/usr/bin/x86_64-linux-gnu-gcc-13",
-        "-DCMAKE_CXX_COMPILER=/usr/bin/x86_64-linux-gnu-g++-13",
-        "-DCMAKE_AR=/usr/bin/x86_64-linux-gnu-ar",
-        "-DCMAKE_RANLIB=/usr/bin/x86_64-linux-gnu-ranlib",
+        "-DCMAKE_C_COMPILER=/usr/bin/cc",
+        "-DCMAKE_CXX_COMPILER=/usr/bin/c++",
+        "-DCMAKE_AR=/usr/bin/ar",
+        "-DCMAKE_RANLIB=/usr/bin/ranlib",
         "-DCMAKE_C_FLAGS=-I/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/Vulkan-Headers-vulkan-sdk-1.4.328.1/include",
         "-DCMAKE_CXX_FLAGS=-I/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/Vulkan-Headers-vulkan-sdk-1.4.328.1/include",
         "-DCMAKE_EXE_LINKER_FLAGS=",
         "-DCMAKE_SHARED_LINKER_FLAGS=",
-        "-DCMAKE_INSTALL_PREFIX=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-d5f56b6c2b44/libaom/install",
+        "-DCMAKE_INSTALL_PREFIX=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/software-linux-x64-6bed58691fb0/libaom/install",
         "-DBUILD_SHARED_LIBS=OFF",
         "-DCONFIG_PIC=1",
         "-DCONFIG_AV1_ENCODER=1",
@@ -437,6 +546,84 @@
       "static": true,
       "pic": true,
       "cmakeVersion": "cmake version 3.28.3"
+    }
+  },
+  "audioCodecBuilds": {
+    "opus": {
+      "source": {
+        "version": "1.6.1",
+        "url": "https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz",
+        "sha256": "6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1",
+        "license": "BSD-3-Clause",
+        "licenseFiles": [
+          "COPYING"
+        ]
+      },
+      "configure": [
+        "/usr/bin/cmake",
+        "-S",
+        "/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/opus-1.6.1",
+        "-B",
+        "/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/audio-linux-x64-4b6610e8f60a/opus/build",
+        "-G",
+        "Ninja",
+        "-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+        "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
+        "-DCMAKE_INSTALL_LIBDIR=lib",
+        "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
+        "-DCMAKE_SYSTEM_PROCESSOR=x86_64",
+        "-DCMAKE_SYSTEM_NAME=Linux",
+        "-DCMAKE_C_COMPILER=/usr/bin/cc",
+        "-DCMAKE_CXX_COMPILER=/usr/bin/c++",
+        "-DCMAKE_AR=/usr/bin/ar",
+        "-DCMAKE_RANLIB=/usr/bin/ranlib",
+        "-DCMAKE_C_FLAGS=-I/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/Vulkan-Headers-vulkan-sdk-1.4.328.1/include",
+        "-DCMAKE_CXX_FLAGS=-I/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/Vulkan-Headers-vulkan-sdk-1.4.328.1/include",
+        "-DCMAKE_EXE_LINKER_FLAGS=",
+        "-DCMAKE_SHARED_LINKER_FLAGS=",
+        "-DCMAKE_INSTALL_PREFIX=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/audio-linux-x64-4b6610e8f60a/opus/install",
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DOPUS_BUILD_SHARED_LIBRARY=OFF",
+        "-DOPUS_BUILD_TESTING=OFF",
+        "-DOPUS_BUILD_PROGRAMS=OFF",
+        "-DOPUS_INSTALL_PKG_CONFIG_MODULE=ON",
+        "-DOPUS_DRED=OFF",
+        "-DOPUS_OSCE=OFF"
+      ],
+      "archive": "libopus.a",
+      "bytes": 1000836,
+      "sha256": "7c0b9ba47a98f434665f811fe0b9a8f73db84e2f18152e5c6ad0f968c5dcda04",
+      "static": true,
+      "pic": true
+    },
+    "lame": {
+      "source": {
+        "version": "3.100",
+        "url": "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz",
+        "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e",
+        "license": "LGPL-2.0-or-later",
+        "licenseFiles": [
+          "COPYING"
+        ]
+      },
+      "configure": [
+        "--prefix=/home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/audio-linux-x64-4b6610e8f60a/lame/install",
+        "--host=x86_64-linux-gnu",
+        "--enable-static",
+        "--disable-shared",
+        "--with-pic",
+        "--disable-frontend",
+        "--disable-decoder",
+        "--disable-analyzer-hooks",
+        "--disable-nasm"
+      ],
+      "archive": "libmp3lame.a",
+      "bytes": 376622,
+      "sha256": "8b09d3cc1b55463ea8a0aa49f82c332d96a340edc5a257f688c09051997cf7d9",
+      "static": true,
+      "pic": true
     }
   },
   "sourcePatches": [
@@ -484,14 +671,16 @@
       "sourceCommit": "92d4c37fbdd08944a0e721bbaeb13318f10aebb0"
     },
     {
-      "file": "Vulkan-Headers.LICENSE.txt",
-      "sha256": "8bfec46a1b5d1b95e730ea0bb60d76838c7cf443a36b0ed21b8c9f6da6c9a8d5",
-      "license": "Apache-2.0"
+      "file": "opus.LICENSE.txt",
+      "sha256": "6a3b984cd9b7f33d0e0b8b7a364ec55b5c087be3134455fdfb5cad9d3fb1cf02",
+      "license": "BSD-3-Clause",
+      "sourceSha256": "6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1"
     },
     {
-      "file": "nv-codec-headers.LICENSE.txt",
-      "sha256": "de9b99e658d138562dc069235eb55858cb0188fe6373e6ca5b860503aada5c03",
-      "license": "MIT"
+      "file": "lame.LICENSE.txt",
+      "sha256": "0a9f029e1a0177b7446792f8a36bb53ba7abdfc20b7339ecdee56614d1b25b24",
+      "license": "LGPL-2.0-or-later",
+      "sourceSha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
     },
     {
       "file": "compiler-runtime.LICENSE.txt",
@@ -510,6 +699,16 @@
           "sha256": "20390f8a6f3b1e4d7cb45dd8652dabb259bbef688cbad839bcdb0b9ba7252f79"
         }
       ]
+    },
+    {
+      "file": "Vulkan-Headers.LICENSE.txt",
+      "sha256": "8bfec46a1b5d1b95e730ea0bb60d76838c7cf443a36b0ed21b8c9f6da6c9a8d5",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "nv-codec-headers.LICENSE.txt",
+      "sha256": "de9b99e658d138562dc069235eb55858cb0188fe6373e6ca5b860503aada5c03",
+      "license": "MIT"
     }
   ],
   "verifiedHardwareBackends": [

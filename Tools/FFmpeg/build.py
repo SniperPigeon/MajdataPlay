@@ -508,6 +508,22 @@ def x265_runtime_libraries(target, tools):
         if not Path(file).is_file():
             raise RuntimeError('Missing target static compiler runtime archive ' + name)
         resolved = Path(file).resolve()
+        if target.startswith('android-'):
+            # The NDK keeps libc++ beside Bionic's static libc/libm. Adding that
+            # sysroot directory to -L makes the linker embed libc.a instead of
+            # its API-level shared stubs; getauxval then crashes in constructors.
+            # Expose only the selected C++ archives through an isolated directory.
+            contents = resolved.read_bytes()
+            digest = hashlib.sha256(contents).hexdigest()
+            directory = CACHE / 'compiler-runtimes' / target / digest[:12]
+            directory.mkdir(parents=True, exist_ok=True)
+            isolated = directory / resolved.name
+            if isolated.exists():
+                if isolated.read_bytes() != contents:
+                    raise RuntimeError('Cached Android compiler runtime archive was modified: ' + str(isolated))
+            else:
+                isolated.write_bytes(contents)
+            resolved = isolated
         # FFmpeg's link probe partitions positional paths before its test object.
         # Keep archives in the library partition while selecting their exact names.
         return ['-L' + posix(resolved.parent), '-l:' + resolved.name]
@@ -703,6 +719,87 @@ def build_software_encoders(target, specific, paths, jobs, bash, dav1d_config):
         configure += ['--extra-ldflags=-static-libstdc++']
     return {'prefixes': prefixes, 'archives': archives, 'configure': configure, 'provenance': reports}
 
+def build_audio_codecs(target, specific, paths, jobs, bash, underlying_config):
+    """Build static PIC Opus/LAME with the FFmpeg target ABI and authenticated sources."""
+    tools = encoder_toolchain(target, specific, paths)
+    identity = hashlib.sha256(json.dumps({'recipe': 1, 'target': target, 'specific': specific,
+        'cc': tools['cc'], 'ar': tools['ar'], 'cmake': tools['cmake'], 'cmakeVersion': tools['cmakeVersion'],
+        'sources': DEPENDENCIES.LOCK['audioCodecs']}, sort_keys=True).encode()).hexdigest()[:12]
+    root = CACHE / ('audio-' + target + '-' + identity)
+    prefixes, archives, reports = {}, [], {}
+    for name, spec in DEPENDENCIES.LOCK['audioCodecs'].items():
+        DEPENDENCIES.verify_audio_source(name)
+        source = DEPENDENCIES.audio_source(name)
+        work = root / name
+        build, prefix = work / 'build', work / 'install'
+        build.mkdir(parents=True, exist_ok=True)
+        prefix.mkdir(parents=True, exist_ok=True)
+        print('BUILD ' + target + ' audio codec ' + name + '; logs: ' + str(work), flush=True)
+        if name == 'opus':
+            options = encoder_cmake_settings(target, tools) + ['-DCMAKE_INSTALL_PREFIX=' + str(prefix),
+                '-DBUILD_SHARED_LIBS=OFF', '-DOPUS_BUILD_SHARED_LIBRARY=OFF', '-DOPUS_BUILD_TESTING=OFF',
+                '-DOPUS_BUILD_PROGRAMS=OFF', '-DOPUS_INSTALL_PKG_CONFIG_MODULE=ON',
+                '-DOPUS_DRED=OFF', '-DOPUS_OSCE=OFF']
+            if target == 'win-arm64':
+                # Opus' ARM runtime CPU detector has no MinGW implementation, and
+                # its CMake presume-only NEON mode omits required declarations.
+                # Keep the authenticated upstream source and use its portable C path.
+                options += ['-DOPUS_DISABLE_INTRINSICS=ON']
+            commands = [[tools['cmake'], '-S', str(source), '-B', str(build)] + options,
+                        [tools['cmake'], '--build', str(build), '--parallel', str(max(1, jobs))],
+                        [tools['cmake'], '--install', str(build)]]
+            for args, log_name in zip(commands, ['configure.log', 'build.log', 'install.log']):
+                with (work / log_name).open('w', encoding='utf-8') as output:
+                    subprocess.run(args, env=tools['environment'], stdout=output, stderr=subprocess.STDOUT, check=True)
+            archive_name = 'libopus.a'
+        else:
+            # Release 3.100 includes its configure script; no host autotools installation
+            # or generated files in the authenticated source tree are required.
+            host = WINDOWS_TARGETS[target][1] if target.startswith('win-') else \
+                'arm-linux-androideabi' if target == 'android-armv7' else 'aarch64-linux-android' if target == 'android-arm64' else \
+                ('x86_64' if target.endswith('x64') else 'aarch64') + ('-apple-darwin' if target.startswith(('macos-', 'ios-')) else '-linux-gnu')
+            options = ['--prefix=' + posix(prefix), '--host=' + host, '--enable-static', '--disable-shared',
+                       '--with-pic', '--disable-frontend', '--disable-decoder', '--disable-analyzer-hooks', '--disable-nasm']
+            def shell_flags(values):
+                values = [posix(value) if Path(value).is_file() else value for value in values]
+                return ' '.join(values) if HOST == 'Windows' else shlex.join(values)
+            exports = {'CC': shell_flags(tools['cc']), 'AR': posix(tools['ar']),
+                       'RANLIB': posix(tools['ranlib']), 'STRIP': posix(tools['strip']),
+                       'CFLAGS': shell_flags(tools['cflags'] + ['-O2', '-fPIC']),
+                       'LDFLAGS': shell_flags(tools['ldflags'])}
+            setup = 'export PATH=' + shlex.quote(':'.join(posix(p) for p in paths) + ':/usr/bin') + ':"$PATH"; '
+            setup += ''.join('export ' + key + '=' + shlex.quote(value) + '; ' for key, value in exports.items())
+            make = shlex.quote(os.environ.get('FFMPEG_MAKE', 'make'))
+            shell(bash, setup + 'bash ' + shlex.quote(posix(source / 'configure')) + ' ' + shlex.join(options), build, work / 'configure.log')
+            shell(bash, setup + make + f' -j{max(1, jobs)}', build, work / 'build.log')
+            shell(bash, setup + make + ' install', build, work / 'install.log')
+            commands = [options]
+            archive_name = 'libmp3lame.a'
+        archive = prefix / 'lib' / archive_name
+        if not archive.is_file():
+            raise RuntimeError('Missing static audio codec archive ' + str(archive))
+        DEPENDENCIES.verify_audio_source(name)
+        prefixes[name] = prefix
+        archives.append(archive)
+        reports[name] = {'source': spec, 'configure': commands[0], 'archive': archive_name,
+                         'bytes': archive.stat().st_size, 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
+                         'static': True, 'pic': True}
+        write_text_atomic(work / 'build-provenance.json', json.dumps(reports[name], indent=2) + '\n')
+    # LAME has no pkg-config file in this release; FFmpeg probes its public header
+    # and static library directly. Opus queries must bypass an unrelated Linux sysroot.
+    underlying = next(arg.split('=', 1)[1] for arg in underlying_config if arg.startswith('--pkg-config='))
+    wrapper = root / 'pkg-config.sh'
+    write_text_atomic(wrapper, '#!/bin/sh\ncase " $* " in\n  *" opus "*)\n'
+        '    unset PKG_CONFIG_SYSROOT_DIR PKG_CONFIG_LIBDIR\n'
+        '    export PKG_CONFIG_PATH=' + shlex.quote(posix(prefixes['opus'] / 'lib/pkgconfig')) + '\n'
+        '    set -- --static "$@"\n    ;;\nesac\nexec ' + underlying + ' "$@"\n')
+    configure = ['--enable-libopus', '--enable-libmp3lame',
+                 '--extra-cflags=-I' + shlex.quote(posix(prefixes['lame'] / 'include')),
+                 '--extra-ldflags=-L' + shlex.quote(posix(prefixes['lame'] / 'lib')),
+                 '--pkg-config=' + shlex.join(['sh', posix(wrapper)])]
+    return {'archives': archives, 'configure': configure, 'provenance': reports}
+
+
 def write_meta(file, target):
     meta = Path(str(file) + '.meta')
     guid = uuid.uuid5(uuid.NAMESPACE_URL, 'majdata-ffmpeg/' + file.relative_to(OUTPUT).as_posix()).hex
@@ -872,8 +969,10 @@ def stage(target, prefix, config, logs, dav1d_prefix, source_patches, software_b
               'buildDependencies': DEPENDENCIES.LOCK,
               'license': 'GPL-3.0-or-later',
               'softwareEncoderBuilds': software_build['provenance'],
+              'audioCodecBuilds': software_build['audio']['provenance'],
               'sourcePatches': [stage_source_patch(destination, patch) for patch in source_patches],
               'buildDependencyLicenses': stage_dav1d_license(destination) + stage_software_encoder_licenses(destination) +
+                                         stage_audio_codec_licenses(destination) +
                                          stage_compiler_runtime_licenses(destination, target, software_build)}
     if target.startswith(('win-', 'linux-', 'android-')):
         report['verifiedHardwareBackends'] = verify_hardware_configuration(target, logs)
@@ -948,6 +1047,25 @@ def stage_software_encoder_licenses(destination):
         write_license_meta(file)
         reports.append({'file': file.name, 'sha256': hashlib.sha256(file.read_bytes()).hexdigest(),
                         'license': spec['license'], 'sourceCommit': spec['commit']})
+    return reports
+
+
+def stage_audio_codec_licenses(destination):
+    """Ship the authenticated audio releases' complete redistribution notices."""
+    reports = []
+    for name, spec in DEPENDENCIES.LOCK['audioCodecs'].items():
+        DEPENDENCIES.verify_audio_source(name)
+        contents = name + ' ' + spec['version'] + '\n' + spec['url'] + '\nSHA256: ' + spec['sha256'] + '\n'
+        # LAME's COPYING is the generic LGPL text. Its README carries the codec
+        # copyright notices and LICENSE supplies the project's attribution guidance.
+        license_files = spec['licenseFiles'] + (['README', 'LICENSE'] if name == 'lame' else [])
+        for filename in license_files:
+            contents += '\n--- ' + filename + ' ---\n' + (DEPENDENCIES.audio_source(name) / filename).read_text(encoding='utf-8').rstrip() + '\n'
+        file = destination / (name + '.LICENSE.txt')
+        write_text_atomic(file, contents)
+        write_license_meta(file)
+        reports.append({'file': file.name, 'sha256': hashlib.sha256(file.read_bytes()).hexdigest(),
+                        'license': spec['license'], 'sourceSha256': spec['sha256']})
     return reports
 
 
@@ -1133,10 +1251,24 @@ def stage_amf_license(destination):
                          '  externalObjects: {}\n  userData:\n  assetBundleName:\n  assetBundleVariant:\n')
     return [{'file': file.name, 'sha256': hashlib.sha256(file.read_bytes()).hexdigest(), 'license': 'MIT'}]
 
+def pcm_encoders():
+    """List all portable PCM encoders in the pinned FFmpeg release (excluding Apple wrappers)."""
+    return ['pcm_' + name for name in (
+        'alaw', 'bluray', 'dvd', 'f32be', 'f32le', 'f64be', 'f64le', 'mulaw', 's8', 's8_planar',
+        's16be', 's16be_planar', 's16le', 's16le_planar', 's24be', 's24daud', 's24le', 's24le_planar',
+        's32be', 's32le', 's32le_planar', 's64be', 's64le', 'u8', 'u16be', 'u16le',
+        'u24be', 'u24le', 'u32be', 'u32le', 'vidc')]
+
+
+def audio_decoders():
+    """Require built-in audio decoding as well as the stable libopus implementation."""
+    return ['aac', 'aac_fixed', 'aac_latm', 'opus', 'libopus', 'mp3', 'mp3float'] + pcm_encoders()
+
+
 def recording_configuration(target):
     """Enable all mandatory software formats alongside existing hardware candidates."""
     # FFmpeg's built-in AAC encoder needs no external library and stores audio in both MP4 and Matroska recordings.
-    encoders = ['mpeg4', 'libx264', 'libx265', 'libvpx_vp9', 'libaom_av1', 'aac']
+    encoders = ['mpeg4', 'libx264', 'libx265', 'libvpx_vp9', 'libaom_av1', 'aac', 'libopus', 'libmp3lame'] + pcm_encoders()
     if target.startswith(('win-', 'linux-')) and target != 'win-arm64':
         encoders += ['h264_nvenc', 'hevc_nvenc', 'av1_nvenc']
     if target.startswith('win-') and target != 'win-arm64':
@@ -1145,7 +1277,7 @@ def recording_configuration(target):
         encoders += ['h264_vaapi', 'hevc_vaapi', 'vp9_vaapi', 'av1_vaapi']
     elif target.startswith(('macos-', 'ios-')):
         encoders += ['h264_videotoolbox']
-    muxers = ['mov', 'mp4', 'matroska', 'webm', 'avi']
+    muxers = ['mov', 'mp4', 'matroska', 'webm', 'avi', 'adts', 'latm', 'ogg', 'opus', 'mp3', 'wav']
     return encoders, muxers
 
 def verify_recording_configuration(target, work):
@@ -1154,11 +1286,13 @@ def verify_recording_configuration(target, work):
     configuration = (work / 'config_components.h').read_text()
     required = [name.upper() + '_ENCODER' for name in encoders]
     required += [name.upper() + '_MUXER' for name in muxers]
+    required += [name.upper() + '_DECODER' for name in audio_decoders()]
     missing = [name for name in required if not re.search(r'^#define CONFIG_' + name + r' 1$', configuration, re.MULTILINE)]
     if missing:
         raise RuntimeError('Requested recording component was disabled: ' + ', '.join(missing))
     native_names = {'libvpx_vp9': 'libvpx-vp9', 'libaom_av1': 'libaom-av1'}
-    return {'encoders': [native_names.get(name, name) for name in encoders], 'muxers': muxers}
+    return {'encoders': [native_names.get(name, name) for name in encoders], 'muxers': muxers,
+            'audioDecoders': audio_decoders()}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1239,11 +1373,16 @@ def main():
             config += dav1d_config
             software_build = build_software_encoders(target, specific, paths, options.jobs, bash, dav1d_config)
             config += software_build['configure']
+            audio_build = build_audio_codecs(target, specific, paths, options.jobs, bash, software_build['configure'])
+            config += audio_build['configure']
+            software_build['archives'] += audio_build['archives']
+            software_build['audio'] = audio_build
             settings_file = work / 'build-settings.json'
             settings = json.dumps({'commit':LOCK['commit'], 'configure':config,
                                    'toolPaths':[str(p) for p in paths], 'runtimePathFix':1,
                                    'sourcePatches': source_patches,
                                    'softwareEncoders': software_build['provenance'],
+                                   'audioCodecs': audio_build['provenance'],
                                    'dav1d': DEPENDENCIES.LOCK['dav1d']}, sort_keys=True)
             if (work / 'ffbuild/config.mak').exists() and (not settings_file.exists() or settings_file.read_text() != settings):
                 shell(bash, setup + shlex.quote(make) + ' clean', work, work / 'clean.log')
@@ -1260,6 +1399,7 @@ def main():
                           'configure': config, 'buildDependencies': DEPENDENCIES.LOCK, 'softwareDecoders': ['libdav1d'],
                           'sourcePatches': source_patches,
                           'license': 'GPL-3.0-or-later', 'softwareEncoderBuilds': software_build['provenance'],
+                          'audioCodecBuilds': audio_build['provenance'],
                           'recordingProfile': recording_profile}
             if target.startswith(('win-', 'linux-', 'android-')):
                 provenance['verifiedHardwareBackends'] = verify_hardware_configuration(target, work)

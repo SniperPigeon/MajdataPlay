@@ -40,6 +40,41 @@ def dav1d_source():
     return SHARED / ('dav1d-' + LOCK['dav1d']['version'])
 
 
+def audio_source(name):
+    """Locate an authenticated audio codec release, shared by all target builds."""
+    return SHARED / (name + '-' + LOCK['audioCodecs'][name]['version'])
+
+
+def verify_audio_source(name, extract=False):
+    """Verify every release file and reject additions; optionally extract a fresh cache."""
+    spec = LOCK['audioCodecs'][name]
+    archive = download_verified(spec)
+    root = audio_source(name)
+    with tarfile.open(archive) as package:
+        members = package.getmembers()
+        expected = set()
+        for item in members:
+            path = (SHARED / item.name).resolve()
+            if (path != root.resolve() and root.resolve() not in path.parents) or not (item.isdir() or item.isfile()):
+                raise RuntimeError('Unexpected audio codec archive member: ' + item.name)
+            if item.isfile():
+                expected.add(path)
+        if extract and not root.exists():
+            SHARED.mkdir(parents=True, exist_ok=True)
+            package.extractall(SHARED)
+        for item in members:
+            if item.isfile():
+                path = SHARED / item.name
+                if path.is_symlink() or not path.is_file() or path.read_bytes() != package.extractfile(item).read():
+                    raise RuntimeError('Pinned audio codec source was modified: ' + str(path))
+        actual = {path.resolve() for path in root.rglob('*') if path.is_file() or path.is_symlink()}
+        if actual != expected:
+            raise RuntimeError('Pinned audio codec source contains additional files: ' + name)
+    for filename in spec['licenseFiles']:
+        if not (root / filename).is_file():
+            raise RuntimeError('Pinned audio codec license is missing: ' + filename)
+
+
 def encoder_source(name):
     """Locate a dependency by its immutable official Git object identity."""
     return SHARED / (name + '-' + LOCK['softwareEncoders'][name]['commit'][:12])
@@ -310,6 +345,8 @@ def ensure_llvm(cache):
 def prepare(targets, cache):
     ensure_dav1d()
     ensure_meson()
+    for name in LOCK['audioCodecs']:
+        verify_audio_source(name, extract=True)
     for name in LOCK['softwareEncoders']:
         ensure_encoder_source(name)
     if any(target.startswith(('win-', 'linux-', 'android-')) for target in targets):

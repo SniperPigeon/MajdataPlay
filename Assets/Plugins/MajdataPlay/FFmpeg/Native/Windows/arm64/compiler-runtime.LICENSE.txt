@@ -4,7 +4,7 @@ libc++abi.a SHA256 ee3097bd06441192ac0a3b4770118e47ebacd756fd276f25053644712e87e
 libunwind.a SHA256 c0abdd37acfc8574d6c15d0dad4c6e64264f25d81a2153d93f43c122143b90c2
 libwinpthread.a SHA256 5858165bf2f1b3f4a9f9523d946f494068a045c8c5982864c0389248c1c77e6b
 
---- /var/tmp/majdata-ffmpeg-windows-arm64-20261008/toolchains/llvm-mingw-20260922-ucrt-ubuntu-22.04-x86_64/LICENSE.TXT ---
+--- /home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/llvm-linux/llvm-mingw-20260922-ucrt-ubuntu-22.04-x86_64/LICENSE.TXT ---
 ==============================================================================
 The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:
 ==============================================================================
@@ -284,7 +284,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE
 SOFTWARE.
 
---- /var/tmp/majdata-ffmpeg-windows-arm64-20261008/toolchains/llvm-mingw-20260922-ucrt-ubuntu-22.04-x86_64/aarch64-w64-mingw32/include/pthread.h ---
+--- /home/lezi/.cache/majdata-ffmpeg-full-encoding-20261005/toolchains/llvm-linux/llvm-mingw-20260922-ucrt-ubuntu-22.04-x86_64/aarch64-w64-mingw32/include/pthread.h ---
 /*
    Copyright (c) 2011-2016 mingw-w64 project
 

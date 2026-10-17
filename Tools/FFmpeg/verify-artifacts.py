@@ -496,6 +496,43 @@ def verify_software_encoder_provenance(directory, manifest):
     print(f'PASS {target}: four pinned static PIC software encoders and GPLv3/dependency redistribution notices verified')
 
 
+def verify_audio_codec_provenance(directory, manifest):
+    """Reject incomplete audio profiles, dependency evidence and redistribution notices."""
+    target = manifest['target']
+    lock = json.loads((ROOT / 'Tools/FFmpeg/dependencies.lock.json').read_text(encoding='utf-8'))['audioCodecs']
+    builds = manifest.get('audioCodecBuilds', {})
+    assert set(builds) == set(lock), (target, 'incomplete audio codec build provenance')
+    assert manifest.get('buildDependencies', {}).get('audioCodecs') == lock, (target, 'audio dependency lock mismatch')
+    profile = manifest.get('recordingProfile', {})
+    assert {'aac', 'libopus', 'libmp3lame', 'pcm_s16le', 'pcm_s24le', 'pcm_s32le', 'pcm_f32le'} <= set(profile.get('encoders', [])), (target, 'incomplete audio encoder profile')
+    pcm = {name for name in profile['encoders'] if name.startswith('pcm_')}
+    decoders = set(profile.get('audioDecoders', []))
+    assert len(pcm) == 31 and pcm <= decoders, (target, 'incomplete PCM encoder/decoder profile')
+    assert {'aac', 'aac_latm', 'opus', 'libopus', 'mp3', 'mp3float'} <= decoders, (target, 'incomplete audio decoder profile')
+    assert {'adts', 'latm', 'ogg', 'opus', 'mp3', 'wav'} <= set(profile.get('muxers', [])), (target, 'incomplete audio muxer profile')
+    assert {'--enable-libopus', '--enable-libmp3lame'} <= set(manifest['configure']), (target, 'audio configure flags missing')
+    licenses = {item['file']: item for item in manifest.get('buildDependencyLicenses', [])}
+    for name, spec in lock.items():
+        build = builds[name]
+        assert build['source'] == spec and build['static'] is True and build['pic'] is True, (target, name, 'audio source/static PIC mismatch')
+        assert build['archive'] == {'opus': 'libopus.a', 'lame': 'libmp3lame.a'}[name], (target, name, 'audio archive mismatch')
+        assert build['bytes'] > 0 and re.fullmatch(r'[0-9a-f]{64}', build['sha256']), (target, name, 'invalid audio archive evidence')
+        assert isinstance(build['configure'], list) and build['configure'], (target, name, 'audio recipe missing')
+        item = licenses.get(name + '.LICENSE.txt')
+        assert item and item['license'] == spec['license'] and item['sourceSha256'] == spec['sha256'], (target, name, 'audio license identity mismatch')
+        file = directory / item['file']
+        assert hashlib.sha256(file.read_bytes()).hexdigest() == item['sha256'], (target, name, 'audio license hash mismatch')
+        contents = file.read_text(encoding='utf-8')
+        assert contents.startswith(name + ' ' + spec['version'] + '\n' + spec['url'] + '\nSHA256: ' + spec['sha256'] + '\n'), (target, name, 'audio license source mismatch')
+        for filename in spec['licenseFiles']:
+            assert '\n--- ' + filename + ' ---\n' in contents, (target, name, 'audio copyright notice missing')
+        if name == 'lame':
+            assert '\n--- README ---\n' in contents and '\n--- LICENSE ---\n' in contents, (target, name, 'LAME attribution guidance missing')
+        if 'simulator' not in target:
+            assert Path(str(file) + '.meta').is_file(), file
+    print(f'PASS {target}: AAC/Opus/MP3 and 31 PCM encoder/decoder pairs, static audio dependencies and licenses')
+
+
 def verify_recording_profile(directory, manifest):
     """Check encoder/muxer registration without claiming device or recording support."""
     profile = manifest.get('recordingProfile')
@@ -517,11 +554,15 @@ def verify_recording_profile(directory, manifest):
             assert patch['versionMarker'] in configuration, (target, patch['file'], 'native source patch build marker mismatch')
     codec.avcodec_find_encoder_by_name.argtypes = [ctypes.c_char_p]
     codec.avcodec_find_encoder_by_name.restype = ctypes.c_void_p
+    codec.avcodec_find_decoder_by_name.argtypes = [ctypes.c_char_p]
+    codec.avcodec_find_decoder_by_name.restype = ctypes.c_void_p
     format_library = ctypes.CDLL(str(directory / filename('avformat')))
     format_library.av_guess_format.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
     format_library.av_guess_format.restype = ctypes.c_void_p
     for encoder in profile['encoders']:
         assert codec.avcodec_find_encoder_by_name(encoder.encode()), (target, encoder, 'recording encoder missing')
+    for decoder in profile.get('audioDecoders', []):
+        assert codec.avcodec_find_decoder_by_name(decoder.encode()), (target, decoder, 'audio decoder missing')
     for muxer in profile['muxers']:
         assert format_library.av_guess_format(muxer.encode(), None, None), (target, muxer, 'recording muxer missing')
     print(f'PASS {target}: recording encoders and muxers exported (device encoding unverified)')
@@ -555,6 +596,7 @@ def main():
             verify_asset_pairs(directory, target)
             verify_source_patches(directory, manifest)
             verify_software_encoder_provenance(directory, manifest)
+            verify_audio_codec_provenance(directory, manifest)
             for item in manifest.get('buildDependencyLicenses', []):
                 license_file = directory / item['file']
                 assert hashlib.sha256(license_file.read_bytes()).hexdigest() == item['sha256'], license_file

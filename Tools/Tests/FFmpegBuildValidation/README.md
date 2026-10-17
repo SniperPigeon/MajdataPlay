@@ -4,6 +4,7 @@ Run from the repository root with Python 3.10 or newer:
 
 ```powershell
 python -B Tools/Tests/FFmpegBuildValidation/test_windows_arm64.py
+python -B Tools/Tests/FFmpegBuildValidation/test_audio_codecs.py
 ```
 
 The offline suite imports the production build recipe and uses inert compiler files
@@ -13,6 +14,13 @@ software encoder recipes, target-specific C++ runtimes, target strip/import-libr
 handling, Unity Player-only ARM64 import metadata, GUID/byte preservation and complete new-target folder/record metadata, and raw/LF
 bridge source hashes including `.def` link inputs. It does not compile or download
 dependencies, load an ARM64 DLL, or demonstrate runtime decoding/GPU integration.
+
+The audio suite requires AAC/Opus/MP3 and all 31 portable PCM encoder/decoder
+pairs on all 11 targets, rejects silently disabled components, verifies release
+archive extraction boundaries and source tampering/additions, and rejects old
+artifacts without audio dependency evidence. It also keeps Android C++ runtime
+search paths isolated from the NDK's static Bionic libc/libm. Real waveform tests are documented
+in `Tools/Tests/FFmpegValidation/README.md`.
 
 Verify real staged outputs separately with:
 

@@ -1,6 +1,6 @@
 # 当前 FFmpeg 解码格式支持
 
-本文说明 MajdataPlay 当前交付的 FFmpeg 原生库具备哪些软件解码器、平台硬件解码入口，以及 `FFmpegVideoPlayer` 实际接入的范围。清单核对日期为 **2026-10-05**，对应固定 **FFmpeg n9.0.1**、commit `bf1b838f2ab88b4f8fd83443325c782ea0e0f7fa` 和静态 **dav1d 1.5.3**，不是系统安装的 `ffmpeg.exe` 或上游默认构建的能力。
+本文说明 MajdataPlay 当前交付的 FFmpeg 原生库具备哪些软件解码器、平台硬件解码入口，以及 `FFmpegVideoPlayer` 实际接入的范围。清单核对日期为 **2026-10-17**，对应固定 **FFmpeg n9.0.1**、commit `bf1b838f2ab88b4f8fd83443325c782ea0e0f7fa` 和静态 **dav1d 1.5.3 / Opus 1.6.1**，不是系统安装的 `ffmpeg.exe` 或上游默认构建的能力。
 
 完整软件格式清单在本文后半部分，按视频及图像、音频、字幕分别列出。先阅读平台汇总和限制，可避免把容器、解码器实现、硬件 API 与实际设备能力混为一谈。
 
@@ -17,6 +17,10 @@ Windows AMF 使用固定 v1.5.2 头文件，动态加载由已有 AMD 显卡驱�
 
 实际编码器、软件/硬件类型、实际采用的 CBR/VBR、视频包约一秒滑动窗口码率由录制会话公开。CBR 是编码器的码率控制模式；单帧、短窗口和容器总码率会波动。采集目前经 GPU 回读到 CPU RGBA，再转换/上传到硬件 encoder，不属于端到端 GPU 零拷贝。
 
+## 原生音频编解码
+
+2026-10-17 的全部架构构建配置新增 `libopus`、`libmp3lame` 和 31 种通用 `pcm_*` encoder，保留 `aac` encoder 与内置 AAC/Opus/MP3/PCM decoder，并增加 `libopus` decoder。音频输出提供 ADTS/LATM、Ogg/Opus、MP3、WAV 及既有兼容容器。依赖静态链接到 avcodec，iOS 归档也已合并依赖。详细配置、VIDC 旧格式限制及实测范围见 [构建说明](README.md#音频编解码) 与 [音频验证记录](AUDIO-RESULTS.md)。这不会自动增加播放器音频输出或 Camera 音轨采集。
+
 ## 支持范围和统计口径
 
 - **软件解码支持**：当前构建编入相应 CPU 解码实现，不需要对应的视频硬解单元；仍受具体 profile、压缩变体、位深、尺寸和有效码流限制。
@@ -25,16 +29,16 @@ Windows AMF 使用固定 v1.5.2 头文件，动态加载由已有 AMD 显卡驱�
 - **格式和容器分开**：H.264、AV1、AAC 是编码格式；MP4、MKV、MOV、WebM 等是容器。能解封装文件不等于其中每条流都能解码；存在 parser 也不等于存在 decoder。
 - **完整清单按 AVCodecID 去重**，同时保留可查询的 decoder 名称。比如 `aac` 与 `aac_fixed` 是同一编码格式的两种实现；图像、未压缩视频、PCM 和历史游戏格式也纳入统计。
 
-各平台共同配置了 **478 个 decoder 实现**。其中 `av1` 是硬件入口，AV1 的软件实现是 `libdav1d`；另有 `anull`、`vnull`、`wrapped_avframe` 三个内部用途条目。将这四项单列后，得到 **474 个通用软件 decoder 实现，对应 464 个格式条目**：
+各平台共同配置了 **479 个 decoder 实现**。其中 `av1` 是硬件入口，AV1 的软件实现是 `libdav1d`；另有 `anull`、`vnull`、`wrapped_avframe` 三个内部用途条目。将这四项单列后，得到 **475 个通用软件 decoder 实现，对应 464 个格式条目**：
 
 | 类别 | 格式条目数 | 软件 decoder 实现数 | 本文清单范围 |
 | --- | ---: | ---: | --- |
 | 视频及图像 | 242 | 243 | 动态视频、静态图像、未压缩像素和历史格式 |
-| 音频 | 202 | 209 | 压缩音频、PCM、ADPCM 等；组件不播放音频 |
+| 音频 | 202 | 210 | 压缩音频、PCM、ADPCM 等；组件不播放音频 |
 | 字幕 | 20 | 22 | 文本和位图字幕；组件不渲染字幕 |
-| 合计 | 464 | 474 | 所有目标共有的软件实现，不含平台包装器 |
+| 合计 | 464 | 475 | 所有目标共有的软件实现，不含平台包装器 |
 
-软件列表的类型、格式名和描述来自交付的 Windows x64 `avcodec-63.dll` 的 `av_codec_iterate()`、`av_codec_is_decoder()`、`avcodec_descriptor_get()`；再与十个目标的 `configure.txt` 做名称集合交叉核对。配置符号与公开 decoder 名称有少量拼写差异，例如 `fourxm` → `4xm`、`cscd` → `camstudio`；下方完整表使用公开 API 名称。
+软件列表的类型、格式名和描述来自交付的 Windows x64 `avcodec-63.dll` 的 `av_codec_iterate()`、`av_codec_is_decoder()`、`avcodec_descriptor_get()`；再与各目标的 `configure.txt` 做名称集合交叉核对。配置符号与公开 decoder 名称有少量拼写差异，例如 `fourxm` → `4xm`、`cscd` → `camstudio`；下方完整表使用公开 API 名称。
 
 ## 平台和架构汇总
 
@@ -42,14 +46,14 @@ Windows AMF 使用固定 v1.5.2 头文件，动态加载由已有 AMD 显卡驱�
 
 | 平台及架构 | decoder 实现总数 | 共同软件格式 | 平台额外 decoder | 已编译视频硬件 API |
 | --- | ---: | --- | --- | --- |
-| Windows x86、x64 | 478 | 上述 464 项 | 无 | D3D11VA、D3D12VA、DXVA2、Vulkan Video |
-| Linux x64 | 478 | 同上 | 无 | VAAPI、Vulkan Video |
-| Android ARMv7、ARM64 | 489 | 同上 | 11 个 MediaCodec 包装器 | MediaCodec、Vulkan Video |
-| macOS x64、ARM64 | 493 | 同上 | 15 个 AudioToolbox 包装器 | VideoToolbox |
-| iOS ARM64 | 493 | 同上 | 15 个 AudioToolbox 包装器 | VideoToolbox |
-| iOS 模拟器 ARM64、x64 | 493 | 同上 | 15 个 AudioToolbox 包装器 | VideoToolbox；编译存在不代表模拟器提供硬解 |
+| Windows x86、x64、ARM64 | 479 | 上述 464 项 | 无 | D3D11VA、D3D12VA、DXVA2、Vulkan Video |
+| Linux x64 | 479 | 同上 | 无 | VAAPI、Vulkan Video |
+| Android ARMv7、ARM64 | 490 | 同上 | 11 个 MediaCodec 包装器 | MediaCodec、Vulkan Video |
+| macOS x64、ARM64 | 494 | 同上 | 15 个 AudioToolbox 包装器 | VideoToolbox |
+| iOS ARM64 | 494 | 同上 | 15 个 AudioToolbox 包装器 | VideoToolbox |
+| iOS 模拟器 ARM64、x64 | 494 | 同上 | 15 个 AudioToolbox 包装器 | VideoToolbox；编译存在不代表模拟器提供硬解 |
 
-这些数量覆盖所有媒体类型，不能称为 478、489 或 493 种视频格式。MediaCodec / AudioToolbox 包装器出现在 `Enabled decoders`，不全在 `Enabled hwaccels` 中。
+这些数量覆盖所有媒体类型，不能称为 479、490 或 494 种视频格式。MediaCodec / AudioToolbox 包装器出现在 `Enabled decoders`，不全在 `Enabled hwaccels` 中。
 
 ## 常用视频编码速查
 
@@ -166,7 +170,7 @@ Vulkan Video 还要求本项目所需的 Vulkan 版本、逐编码 video decode 
 | --- | --- |
 | PNG、APNG、OpenEXR、ZMBV、TechSmith TSCC、ZLIB 视频 | 没有注册相应 decoder；`tscc2` 是另一项已存在的解码器 |
 | JPEG XL、JPEG XS、AVS2、AVS3、EVC、LC3 | 没有相应 decoder；即使有 parser 或 demuxer，也不能据此解码 |
-| `libaom-av1`、`libvpx`、`libjxl` 等外部解码实现 | 当前外部软件 decoder 是 dav1d；libaom/libvpx 只用于编码，原生 VP8/VP9 等软件解码仍存在 |
+| `libaom-av1`、`libvpx`、`libjxl` 等外部解码实现 | 当前外部软件 decoder 是 dav1d 和 libopus；libaom/libvpx 只用于编码，原生 VP8/VP9 等软件解码仍存在 |
 | CamStudio，公开名称 `camstudio`，配置名称 `cscd` | LZO 路径存在；本构建无 zlib，zlib 压缩变体不可用 |
 | TIFF | decoder 存在；本构建无 zlib/LZMA，Deflate/LZMA 压缩变体不可用 |
 | Sorenson SVQ3 | decoder 存在；需要 zlib 解压的压缩水印变体不可用 |
@@ -569,7 +573,7 @@ Vulkan Video 还要求本项目所需的 Vulkan 版本、逐编码 video decode 
 | `musepack7` | Musepack SV7 | `mpc7` |
 | `musepack8` | Musepack SV8 | `mpc8` |
 | `nellymoser` | Nellymoser Asao | `nellymoser` |
-| `opus` | Opus (Opus Interactive Audio Codec) | `opus` |
+| `opus` | Opus (Opus Interactive Audio Codec) | `opus`、`libopus` |
 | `osq` | OSQ (Original Sound Quality) | `osq` |
 | `paf_audio` | Amazing Studio Packed Animation File Audio | `paf_audio` |
 | `pcm_alaw` | PCM A-law / G.711 A-law | `pcm_alaw` |

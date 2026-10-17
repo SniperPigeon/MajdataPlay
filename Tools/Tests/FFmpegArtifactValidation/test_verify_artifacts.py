@@ -310,7 +310,7 @@ class DependencySelectionTests(unittest.TestCase):
 
     def prepare(self, targets):
         """Observe preparation choices without invoking Git or the network."""
-        names = ('ensure_dav1d', 'ensure_meson', 'ensure_encoder_source', 'ensure_vulkan_headers',
+        names = ('ensure_dav1d', 'ensure_meson', 'ensure_encoder_source', 'verify_audio_source', 'ensure_vulkan_headers',
                  'ensure_nvcodec_headers', 'ensure_amf_headers', 'ensure_llvm')
         with ExitStack() as stack:
             mocks = {name: stack.enter_context(patch.object(DEPENDENCIES, name)) for name in names}
@@ -325,6 +325,7 @@ class DependencySelectionTests(unittest.TestCase):
         self.assertEqual(calls['ensure_vulkan_headers'], 1)
         self.assertEqual(calls['ensure_dav1d'], 1)
         self.assertEqual(calls['ensure_encoder_source'], 4)
+        self.assertEqual(calls['verify_audio_source'], 2)
 
     def test_mixed_windows_targets_keep_vendor_headers(self):
         for target in ('win-x86', 'win-x64'):
@@ -407,7 +408,7 @@ class AuditCompletenessTests(unittest.TestCase):
                 stack.enter_context(patch.object(VERIFY, 'NATIVE', native))
                 stack.enter_context(patch.dict(VERIFY.os.environ, {'FFMPEG_BUILD_ROOT': str(root / 'Build')}))
                 stack.enter_context(patch.object(sys, 'argv', ['verify-artifacts.py', '--targets', requested, '--skip-host-load']))
-                for name in ('verify_source_patches', 'verify_software_encoder_provenance', 'verify_binary', 'verify_asset_pairs',
+                for name in ('verify_source_patches', 'verify_software_encoder_provenance', 'verify_audio_codec_provenance', 'verify_binary', 'verify_asset_pairs',
                              'verify_importer', 'verify_bridge_sources'):
                     stack.enter_context(patch.object(VERIFY, name))
                 output = stack.enter_context(redirect_stdout(io.StringIO()))

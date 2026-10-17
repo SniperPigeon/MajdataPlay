@@ -158,12 +158,13 @@ class WindowsArm64BuildTests(unittest.TestCase):
                     BUILD.verify_hardware_configuration('win-arm64', work)
 
     def test_recording_profile_is_software_only_on_arm64(self):
-        """The four fixed codecs, MPEG4 and AAC audio remain mandatory without vendor encoders."""
+        """Software video and audio remain mandatory without vendor encoders."""
         encoders, muxers = BUILD.recording_configuration('win-arm64')
-        self.assertEqual(encoders, ['mpeg4', 'libx264', 'libx265', 'libvpx_vp9', 'libaom_av1', 'aac'])
+        self.assertEqual(encoders, ['mpeg4', 'libx264', 'libx265', 'libvpx_vp9', 'libaom_av1',
+                                   'aac', 'libopus', 'libmp3lame'] + BUILD.pcm_encoders())
         for target in BUILD.TARGETS:
             self.assertIn('aac', BUILD.recording_configuration(target)[0])
-        self.assertEqual(muxers, ['mov', 'mp4', 'matroska', 'webm', 'avi'])
+        self.assertEqual(muxers, ['mov', 'mp4', 'matroska', 'webm', 'avi', 'adts', 'latm', 'ogg', 'opus', 'mp3', 'wav'])
         self.assertIn('h264_nvenc', BUILD.recording_configuration('win-x64')[0])
         self.assertIn('h264_amf', BUILD.recording_configuration('win-x86')[0])
 

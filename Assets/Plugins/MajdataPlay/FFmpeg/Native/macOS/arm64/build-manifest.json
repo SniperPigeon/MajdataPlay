@@ -4,6 +4,10 @@
     "repository": "https://github.com/FFmpeg/FFmpeg.git",
     "tag": "n9.0.1",
     "commit": "bf1b838f2ab88b4f8fd83443325c782ea0e0f7fa",
+    "licenseSha256": {
+      "COPYING.GPLv2": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "COPYING.GPLv3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
     "abi": {
       "avcodec": 63,
       "avdevice": 63,
@@ -16,8 +20,8 @@
     "bindingHeaders": "ThirdParty/FFmpeg.AutoGen/FFmpeg/include",
     "note": "All upstream public headers present in the binding header snapshot are compared after CRLF normalization before building. Generated avconfig.h and ffversion.h are excluded."
   },
-  "host": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
-  "builtUtc": "2026-10-05T12:29:14.356514+00:00",
+  "host": "macOS-27.0.1-arm64-arm-64bit",
+  "builtUtc": "2026-10-17T13:52:03.067650+00:00",
   "configure": [
     "--prefix=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/install/macos-arm64",
     "--disable-doc",
@@ -36,8 +40,8 @@
     "--disable-decoder=adpcm_circus,adpcm_ima_escape,adpcm_ima_hvqm2,adpcm_ima_hvqm4,adpcm_ima_magix,adpcm_ima_pda,adpcm_n64,adpcm_psxc,ahx",
     "--disable-parser=ahx",
     "--disable-bsf=ahx_to_mp2",
-    "--enable-encoder=mpeg4,libx264,libx265,libvpx_vp9,libaom_av1,h264_videotoolbox",
-    "--enable-muxer=mov,mp4,matroska,webm,avi",
+    "--enable-encoder=mpeg4,libx264,libx265,libvpx_vp9,libaom_av1,aac,libopus,libmp3lame,pcm_alaw,pcm_bluray,pcm_dvd,pcm_f32be,pcm_f32le,pcm_f64be,pcm_f64le,pcm_mulaw,pcm_s8,pcm_s8_planar,pcm_s16be,pcm_s16be_planar,pcm_s16le,pcm_s16le_planar,pcm_s24be,pcm_s24daud,pcm_s24le,pcm_s24le_planar,pcm_s32be,pcm_s32le,pcm_s32le_planar,pcm_s64be,pcm_s64le,pcm_u8,pcm_u16be,pcm_u16le,pcm_u24be,pcm_u24le,pcm_u32be,pcm_u32le,pcm_vidc,h264_videotoolbox",
+    "--enable-muxer=mov,mp4,matroska,webm,avi,adts,latm,ogg,opus,mp3,wav",
     "--enable-shared",
     "--disable-static",
     "--target-os=darwin",
@@ -58,43 +62,48 @@
     "--enable-libvpx",
     "--enable-libaom",
     "--disable-decoder=libvpx_vp8,libvpx_vp9,libaom_av1",
-    "--pkg-config=sh /Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-a7add5baa3e2/pkg-config.sh"
+    "--pkg-config=sh /Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-73465d8aabf8/pkg-config.sh",
+    "--enable-libopus",
+    "--enable-libmp3lame",
+    "--extra-cflags=-I/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/audio-macos-arm64-81d9696d0c65/lame/install/include",
+    "--extra-ldflags=-L/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/audio-macos-arm64-81d9696d0c65/lame/install/lib",
+    "--pkg-config=sh /Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/audio-macos-arm64-81d9696d0c65/pkg-config.sh"
   ],
   "files": [
     {
       "file": "libavcodec.63.dylib",
-      "bytes": 19774248,
-      "sha256": "326d36a62c8ff3503ab3dde13cdcf55169f11d9819a8ae6d5c790d926fc92362"
+      "bytes": 20519608,
+      "sha256": "8f54be62d1c5736128cbbeb0df67c8342cfd578478b6433866238e3c3a022c77"
     },
     {
       "file": "libavdevice.63.dylib",
       "bytes": 52232,
-      "sha256": "4312cb0f0b542df1a59749d6788ae68c1a5db7fa0e448c7d5c02dbdab4985c70"
+      "sha256": "719863ccff78df41174afe857ba3d28f7da151dd222b2c8cba763cb7c77b7f31"
     },
     {
       "file": "libavfilter.12.dylib",
       "bytes": 183864,
-      "sha256": "45abd51cafb7ba39bb11fc482615aa62fb6da9c04e26ae9653851780d6366525"
+      "sha256": "8e4de581417c7f043987aed353ae362b89c288b3c7ddd77f94d3740fd1f1d1a6"
     },
     {
       "file": "libavformat.63.dylib",
-      "bytes": 2154088,
-      "sha256": "5a79c25abc14086f16f2f7f17cd4cde6dcd4cdac59791ed9b751a5ce78902ae0"
+      "bytes": 2187480,
+      "sha256": "889c243d47e33d49b44a57f72173f54b7842c66a1b8164a5705fb9154a8cd7f2"
     },
     {
       "file": "libavutil.61.dylib",
       "bytes": 744840,
-      "sha256": "8490ba37b43529013a5f5461d3652f6c2b70bed92984ab09af3246b3f6c5af84"
+      "sha256": "035534223950018f782a11673a5f9eed02b0b2ccf652798f0c2209311e56aa20"
     },
     {
       "file": "libswresample.7.dylib",
-      "bytes": 120312,
-      "sha256": "3a2ee9b54cc41d9b703740430925360854303043608c45fd500abc96b3d4b103"
+      "bytes": 136824,
+      "sha256": "6fc2f652da2d1084b96e702b043dbdd8f66d5c8cb559226abec913dbf7620cca"
     },
     {
       "file": "libswscale.10.dylib",
       "bytes": 1218376,
-      "sha256": "8c0e8df612cbabf03ebc066628327a1bcf90d76a11134cc6f9fff1c115fd42d0"
+      "sha256": "6c00aabf8841fd4cf014ddc87dd772911f730b5dc13fbd42b05315dfbddaeb86"
     }
   ],
   "softwareDecoders": [
@@ -107,6 +116,40 @@
       "libx265",
       "libvpx-vp9",
       "libaom-av1",
+      "aac",
+      "libopus",
+      "libmp3lame",
+      "pcm_alaw",
+      "pcm_bluray",
+      "pcm_dvd",
+      "pcm_f32be",
+      "pcm_f32le",
+      "pcm_f64be",
+      "pcm_f64le",
+      "pcm_mulaw",
+      "pcm_s8",
+      "pcm_s8_planar",
+      "pcm_s16be",
+      "pcm_s16be_planar",
+      "pcm_s16le",
+      "pcm_s16le_planar",
+      "pcm_s24be",
+      "pcm_s24daud",
+      "pcm_s24le",
+      "pcm_s24le_planar",
+      "pcm_s32be",
+      "pcm_s32le",
+      "pcm_s32le_planar",
+      "pcm_s64be",
+      "pcm_s64le",
+      "pcm_u8",
+      "pcm_u16be",
+      "pcm_u16le",
+      "pcm_u24be",
+      "pcm_u24le",
+      "pcm_u32be",
+      "pcm_u32le",
+      "pcm_vidc",
       "h264_videotoolbox"
     ],
     "muxers": [
@@ -114,7 +157,53 @@
       "mp4",
       "matroska",
       "webm",
-      "avi"
+      "avi",
+      "adts",
+      "latm",
+      "ogg",
+      "opus",
+      "mp3",
+      "wav"
+    ],
+    "audioDecoders": [
+      "aac",
+      "aac_fixed",
+      "aac_latm",
+      "opus",
+      "libopus",
+      "mp3",
+      "mp3float",
+      "pcm_alaw",
+      "pcm_bluray",
+      "pcm_dvd",
+      "pcm_f32be",
+      "pcm_f32le",
+      "pcm_f64be",
+      "pcm_f64le",
+      "pcm_mulaw",
+      "pcm_s8",
+      "pcm_s8_planar",
+      "pcm_s16be",
+      "pcm_s16be_planar",
+      "pcm_s16le",
+      "pcm_s16le_planar",
+      "pcm_s24be",
+      "pcm_s24daud",
+      "pcm_s24le",
+      "pcm_s24le_planar",
+      "pcm_s32be",
+      "pcm_s32le",
+      "pcm_s32le_planar",
+      "pcm_s64be",
+      "pcm_s64le",
+      "pcm_u8",
+      "pcm_u16be",
+      "pcm_u16le",
+      "pcm_u24be",
+      "pcm_u24le",
+      "pcm_u32be",
+      "pcm_u32le",
+      "pcm_vidc"
     ]
   },
   "buildDependencies": {
@@ -169,6 +258,26 @@
           "file": "llvm-mingw-20260922-ucrt-x86_64.zip",
           "sha256": "e3ad77d117a4bea19a7a3b333341824d79a5a371004a10e25b8504e7b3047666"
         }
+      }
+    },
+    "audioCodecs": {
+      "opus": {
+        "version": "1.6.1",
+        "url": "https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz",
+        "sha256": "6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1",
+        "license": "BSD-3-Clause",
+        "licenseFiles": [
+          "COPYING"
+        ]
+      },
+      "lame": {
+        "version": "3.100",
+        "url": "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz",
+        "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e",
+        "license": "LGPL-2.0-or-later",
+        "licenseFiles": [
+          "COPYING"
+        ]
       }
     },
     "softwareEncoders": {
@@ -240,7 +349,7 @@
         ]
       },
       "configure": [
-        "--prefix=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-a7add5baa3e2/x264/install",
+        "--prefix=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-73465d8aabf8/x264/install",
         "--host=aarch64-apple-darwin",
         "--enable-static",
         "--enable-pic",
@@ -256,7 +365,7 @@
       ],
       "archive": "libx264.a",
       "bytes": 910952,
-      "sha256": "89116c5c8b68d34fbd7b4495992e6853670a924c067b73a25a9c22cc69f562e3",
+      "sha256": "7293b63db4656710138f2080f39c993b9283279ad6a94aef3f09f266ee1f9acc",
       "static": true,
       "pic": true
     },
@@ -277,10 +386,10 @@
         "-S",
         "/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/toolchains/x265-1d117bed4747/source",
         "-B",
-        "/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-a7add5baa3e2/x265/build",
+        "/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-73465d8aabf8/x265/build",
         "-G",
         "Ninja",
-        "-DCMAKE_MAKE_PROGRAM=/opt/homebrew/Cellar/ninja/1.13.2/bin/ninja",
+        "-DCMAKE_MAKE_PROGRAM=/opt/homebrew/bin/ninja",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
         "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
@@ -289,7 +398,7 @@
         "-DCMAKE_SYSTEM_PROCESSOR=arm64",
         "-DCMAKE_SYSTEM_NAME=Darwin",
         "-DCMAKE_C_COMPILER=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang",
-        "-DCMAKE_CXX_COMPILER=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang",
+        "-DCMAKE_CXX_COMPILER=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++",
         "-DCMAKE_AR=/usr/bin/ar",
         "-DCMAKE_RANLIB=/usr/bin/ranlib",
         "-DCMAKE_OSX_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
@@ -299,7 +408,7 @@
         "-DCMAKE_CXX_FLAGS=-target arm64-apple-macos11.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
         "-DCMAKE_EXE_LINKER_FLAGS=-target arm64-apple-macos11.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
         "-DCMAKE_SHARED_LINKER_FLAGS=-target arm64-apple-macos11.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
-        "-DCMAKE_INSTALL_PREFIX=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-a7add5baa3e2/x265/install",
+        "-DCMAKE_INSTALL_PREFIX=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-73465d8aabf8/x265/install",
         "-DENABLE_SHARED=OFF",
         "-DENABLE_CLI=OFF",
         "-DENABLE_PIC=ON",
@@ -320,7 +429,7 @@
       ],
       "archive": "libx265.a",
       "bytes": 2263224,
-      "sha256": "1a8281c14c19cc9da9c5e82981ece6a8bcbeefb02fa4fab6c27f2d97d7c668bb",
+      "sha256": "c8192a57df57ff032ad1c4e0a79303bd19232d7ad2978e58aa49368dec860d6e",
       "static": true,
       "pic": true,
       "cmakeVersion": "cmake version 3.31.10",
@@ -344,7 +453,7 @@
         ]
       },
       "configure": [
-        "--prefix=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-a7add5baa3e2/libvpx/install",
+        "--prefix=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-73465d8aabf8/libvpx/install",
         "--target=generic-gnu",
         "--enable-pic",
         "--enable-static",
@@ -362,7 +471,7 @@
       ],
       "archive": "libvpx.a",
       "bytes": 1200160,
-      "sha256": "8edfd3e03433814c682eab3a5b2c5ad76698a4cbf1c54973af3f25ef7429af09",
+      "sha256": "c61c9776c1ae8431b2e88ad3d1cc29fbf0f160e9ba8bfff1cd5f2384aea32a4d",
       "static": true,
       "pic": true
     },
@@ -388,10 +497,10 @@
         "-S",
         "/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/toolchains/libaom-92d4c37fbdd0",
         "-B",
-        "/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-a7add5baa3e2/libaom/build",
+        "/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-73465d8aabf8/libaom/build",
         "-G",
         "Ninja",
-        "-DCMAKE_MAKE_PROGRAM=/opt/homebrew/Cellar/ninja/1.13.2/bin/ninja",
+        "-DCMAKE_MAKE_PROGRAM=/opt/homebrew/bin/ninja",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
         "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
@@ -400,7 +509,7 @@
         "-DCMAKE_SYSTEM_PROCESSOR=arm64",
         "-DCMAKE_SYSTEM_NAME=Darwin",
         "-DCMAKE_C_COMPILER=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang",
-        "-DCMAKE_CXX_COMPILER=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang",
+        "-DCMAKE_CXX_COMPILER=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++",
         "-DCMAKE_AR=/usr/bin/ar",
         "-DCMAKE_RANLIB=/usr/bin/ranlib",
         "-DCMAKE_OSX_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
@@ -410,7 +519,7 @@
         "-DCMAKE_CXX_FLAGS=-target arm64-apple-macos11.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
         "-DCMAKE_EXE_LINKER_FLAGS=-target arm64-apple-macos11.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
         "-DCMAKE_SHARED_LINKER_FLAGS=-target arm64-apple-macos11.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
-        "-DCMAKE_INSTALL_PREFIX=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-a7add5baa3e2/libaom/install",
+        "-DCMAKE_INSTALL_PREFIX=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/software-macos-arm64-73465d8aabf8/libaom/install",
         "-DBUILD_SHARED_LIBS=OFF",
         "-DCONFIG_PIC=1",
         "-DCONFIG_AV1_ENCODER=1",
@@ -424,10 +533,91 @@
       ],
       "archive": "libaom.a",
       "bytes": 5150712,
-      "sha256": "9abb3296f1b4d1b57ae4b836ed47ed96be84af1373b8075928fbe3ca8d75f308",
+      "sha256": "17a1be893d1f2a9ec94aa67eaacd7f73f1830008dfe9f5bdaecd52a094cf1859",
       "static": true,
       "pic": true,
       "cmakeVersion": "cmake version 3.31.10"
+    }
+  },
+  "audioCodecBuilds": {
+    "opus": {
+      "source": {
+        "version": "1.6.1",
+        "url": "https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz",
+        "sha256": "6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1",
+        "license": "BSD-3-Clause",
+        "licenseFiles": [
+          "COPYING"
+        ]
+      },
+      "configure": [
+        "/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/toolchains/cmake-3.31.10-wheel/cmake/data/bin/cmake",
+        "-S",
+        "/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/toolchains/opus-1.6.1",
+        "-B",
+        "/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/audio-macos-arm64-81d9696d0c65/opus/build",
+        "-G",
+        "Ninja",
+        "-DCMAKE_MAKE_PROGRAM=/opt/homebrew/bin/ninja",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+        "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
+        "-DCMAKE_INSTALL_LIBDIR=lib",
+        "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
+        "-DCMAKE_SYSTEM_PROCESSOR=arm64",
+        "-DCMAKE_SYSTEM_NAME=Darwin",
+        "-DCMAKE_C_COMPILER=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang",
+        "-DCMAKE_CXX_COMPILER=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++",
+        "-DCMAKE_AR=/usr/bin/ar",
+        "-DCMAKE_RANLIB=/usr/bin/ranlib",
+        "-DCMAKE_OSX_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+        "-DCMAKE_OSX_ARCHITECTURES=arm64",
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0",
+        "-DCMAKE_C_FLAGS=-target arm64-apple-macos11.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+        "-DCMAKE_CXX_FLAGS=-target arm64-apple-macos11.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+        "-DCMAKE_EXE_LINKER_FLAGS=-target arm64-apple-macos11.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+        "-DCMAKE_SHARED_LINKER_FLAGS=-target arm64-apple-macos11.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+        "-DCMAKE_INSTALL_PREFIX=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/audio-macos-arm64-81d9696d0c65/opus/install",
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DOPUS_BUILD_SHARED_LIBRARY=OFF",
+        "-DOPUS_BUILD_TESTING=OFF",
+        "-DOPUS_BUILD_PROGRAMS=OFF",
+        "-DOPUS_INSTALL_PKG_CONFIG_MODULE=ON",
+        "-DOPUS_DRED=OFF",
+        "-DOPUS_OSCE=OFF"
+      ],
+      "archive": "libopus.a",
+      "bytes": 700984,
+      "sha256": "d9f0d9fcd049bb407495e850368bbb952b39b6f8807d4456ccf0b79472ec03f7",
+      "static": true,
+      "pic": true
+    },
+    "lame": {
+      "source": {
+        "version": "3.100",
+        "url": "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz",
+        "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e",
+        "license": "LGPL-2.0-or-later",
+        "licenseFiles": [
+          "COPYING"
+        ]
+      },
+      "configure": [
+        "--prefix=/Users/codex/codex-work/majdata-full-encoding-apple-20261005/Tools/FFmpeg/.build/audio-macos-arm64-81d9696d0c65/lame/install",
+        "--host=aarch64-apple-darwin",
+        "--enable-static",
+        "--disable-shared",
+        "--with-pic",
+        "--disable-frontend",
+        "--disable-decoder",
+        "--disable-analyzer-hooks",
+        "--disable-nasm"
+      ],
+      "archive": "libmp3lame.a",
+      "bytes": 324720,
+      "sha256": "b9d011b8bbfd3a7e6f2b1ad9614b1c2069b572ff04569f4f22b90db7a7f80163",
+      "static": true,
+      "pic": true
     }
   },
   "sourcePatches": [
@@ -473,6 +663,18 @@
       "sha256": "935b57edbc3c5f966c06a306c3bd9a933e843ebfd6580047918b960f68fb0d03",
       "license": "BSD-2-Clause and AOM Patent License 1.0",
       "sourceCommit": "92d4c37fbdd08944a0e721bbaeb13318f10aebb0"
+    },
+    {
+      "file": "opus.LICENSE.txt",
+      "sha256": "6a3b984cd9b7f33d0e0b8b7a364ec55b5c087be3134455fdfb5cad9d3fb1cf02",
+      "license": "BSD-3-Clause",
+      "sourceSha256": "6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1"
+    },
+    {
+      "file": "lame.LICENSE.txt",
+      "sha256": "0a9f029e1a0177b7446792f8a36bb53ba7abdfc20b7339ecdee56614d1b25b24",
+      "license": "LGPL-2.0-or-later",
+      "sourceSha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
     }
   ]
 }
