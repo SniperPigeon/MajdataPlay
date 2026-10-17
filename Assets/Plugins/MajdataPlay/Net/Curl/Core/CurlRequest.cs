@@ -61,6 +61,19 @@ namespace MajdataPlay.Net.Curl.Core
                 _handle.Free();
             }
         }
+
+        /// <summary>
+        /// Frees the handle that libcurl's read and seek callbacks use to find this request, and skips finalization.
+        /// Only call this once the easy handle has been cleaned up, because no callback can run after that.
+        /// </summary>
+        internal void ReleaseHandle()
+        {
+            if (_handle.IsAllocated)
+            {
+                _handle.Free();
+            }
+            GC.SuppressFinalize(this);
+        }
         public void ApplyTo(CurlEasy curlEasy)
         {
             if (Interlocked.CompareExchange(ref _applyFlag, 1 , 0) == 1)
@@ -103,9 +116,18 @@ namespace MajdataPlay.Net.Curl.Core
             }
             var length = (int)(size.ToUInt32() * nmemb.ToUInt32());
             var buffer = new Span<byte>((void*)ptr, length);
-            var read = contentStream.Read(buffer);
+            try
+            {
+                var read = contentStream.Read(buffer);
 
-            return (UIntPtr)read;
+                return (UIntPtr)read;
+            }
+            catch
+            {
+                // The content may have been disposed or may fail; an exception must never unwind through libcurl's
+                // native frames, so the transfer is aborted instead.
+                return CurlCallbackReturn.Read.Abort;
+            }
         }
         [MonoPInvokeCallback(typeof(CurlSeekCallback))]
         static unsafe CurlSeekCallbackReturn OnSeekCallback(IntPtr userdata, long offset, SeekOrigin origin)

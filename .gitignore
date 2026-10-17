@@ -115,6 +115,9 @@ out.log
 !/Tools/Tests/ChartStorageValidation/ChartStorageValidation.csproj
 !/Tools/Tests/ResourceStorageValidation/ResourceStorageValidation.csproj
 
+# Independent libcurl HTTP handler validation harness; builds into Temp/CurlValidation.
+!/Tools/Tests/CurlValidation/CurlValidation.csproj
+
 # Independent full Java API wrapper CLI and its validation harness.
 !/Tools/CSharp/AndroidJavaWrapperGenerator/AndroidJavaWrapperGenerator.csproj
 !/Tools/Tests/AndroidJavaWrapperGeneratorValidation/AndroidJavaWrapperGeneratorValidation.csproj

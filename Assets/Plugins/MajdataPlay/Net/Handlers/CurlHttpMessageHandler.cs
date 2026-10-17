@@ -19,7 +19,19 @@ namespace MajdataPlay.Net.Curl
         public SslProtocols SslProtocols { get; set; } = SslProtocols.Tls12 | SslProtocols.Tls13;
         public IWebProxy? Proxy { get; set; }
         public bool PreAuthenticate { get; set; }
-        public int MaxResponseHeadersLength { get; set; } = 64 * 1024; // 64KB
+        /// <summary>
+        /// Gets or sets the maximum length, in bytes, of one block of response headers (an interim or redirect
+        /// response, the final response, or the trailers). Defaults to 64 KiB.
+        /// </summary>
+        /// <remarks>
+        /// <c>HttpClientHandler.MaxResponseHeadersLength</c> is in kilobytes; this property is in bytes.
+        /// </remarks>
+        public int MaxResponseHeadersLength { get; set; } = 64 * 1024;
+        /// <summary>
+        /// Gets or sets the number of response body bytes that may be buffered ahead of the reader before the transfer
+        /// is paused. Defaults to 64 KiB.
+        /// </summary>
+        public int ResponseBodyBufferSize { get; set; } = 64 * 1024;
         public long MaxRequestContentBufferSize { get; set; } = int.MaxValue;
         public int MaxConnectionsPerServer { get; set; } = 8;
         public int MaxAutomaticRedirections { get; set; } = 50;
@@ -85,6 +97,7 @@ namespace MajdataPlay.Net.Curl
                 Proxy = Proxy,
                 PreAuthenticate = PreAuthenticate,
                 MaxResponseHeadersLength = MaxResponseHeadersLength,
+                ResponseBodyBufferSize = ResponseBodyBufferSize,
                 MaxRequestContentBufferSize = MaxRequestContentBufferSize,
                 MaxConnectionsPerServer = MaxConnectionsPerServer,
                 MaxAutomaticRedirections = MaxAutomaticRedirections,
