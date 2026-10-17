@@ -1,4 +1,4 @@
-﻿using MajdataPlay.Diagnostics;
+using MajdataPlay.Diagnostics;
 using MajdataPlay.Net.Curl.Core;
 using MajdataPlay.Net.Curl.Core.PInvoke;
 using System;
@@ -23,9 +23,13 @@ namespace MajdataPlay.Net.Curl.Utils
             _androidCAPath = Path.Combine(Application.persistentDataPath, "Runtime", "Networking", "ca.pem");
         }
 
+        /// <summary>
+        /// Points <paramref name="curlEasy"/> at the platform's CA certificate bundle file, where the platform needs one.
+        /// The SSL option bits a platform needs come from <see cref="GetPlatformSslOptions"/> instead.
+        /// </summary>
+        /// <param name="curlEasy">The easy handle to configure.</param>
         public static void ApplySystemCA(CurlEasy curlEasy)
         {
-            var returnCode = default(CurlCode?);
 #if UNITY_ANDROID
             if(File.Exists(_androidCAPath))
             {
@@ -42,17 +46,27 @@ namespace MajdataPlay.Net.Curl.Utils
             {
                 MajDebug.LogWarning($"[libcurl]CA certificate bundle not found");
             }
-#elif UNITY_STANDALONE_WIN || UNITY_WSA
-            returnCode = LibCurl.Easy.SetOption(curlEasy.Handle, CurlOption.SslOptions, CurlSslOption.NativeCa);
-            if (returnCode is CurlCode code && code != CurlCode.Ok)
-            {
-                MajDebug.LogWarning(
-                    $"[libcurl]Failed to enable native CA certificate store. " +
-                    $"Option: CURLSSLOPT_NATIVE_CA, " +
-                    $"Error: {code} ({GetCurlErrorMessage(code)})");
-            }
 #endif
 
+        }
+
+        /// <summary>
+        /// Gets the <c>CURLOPT_SSL_OPTIONS</c> bits this platform needs to find trusted root certificates.
+        /// </summary>
+        /// <remarks>
+        /// <c>CURLOPT_SSL_OPTIONS</c> is a single bitmask, so these bits must be combined with every other SSL option
+        /// in one call; see <see cref="CurlHttpConfig.GetSslOptions"/>.
+        /// </remarks>
+        /// <returns><see cref="CurlSslOption.NativeCa"/> on Windows; otherwise <see cref="CurlSslOption.None"/>.</returns>
+        public static CurlSslOption GetPlatformSslOptions()
+        {
+#if UNITY_STANDALONE_WIN || UNITY_WSA
+            // The bundled Windows libcurl uses OpenSSL without a CA bundle. That build already falls back to the Windows
+            // ROOT and CA stores, but the flag keeps them trusted if a later build ships a bundle or changes that default.
+            return CurlSslOption.NativeCa;
+#else
+            return CurlSslOption.None;
+#endif
         }
         public static void EnsureSuccess(IntPtr easyHandle, CurlCode code)
         {

@@ -19,6 +19,9 @@ namespace MajdataPlay.Net.Curl.Core
             ThisHandle = LibCurl.Easy.Init();
             if (ThisHandle == IntPtr.Zero)
             {
+                // The finalizer only releases allocated handles, so the reference must be returned here.
+                LibCurlLifecycle.Release();
+                GC.SuppressFinalize(this);
                 throw new InvalidOperationException("Failed to initialize libcurl.");
             }
         }

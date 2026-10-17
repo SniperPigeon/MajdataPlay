@@ -21,12 +21,13 @@ namespace MajdataPlay.Net.Curl.Core
         internal CurlRequest Request { get; }
 
         int _disposeFlag = 0;
-        int _isCleanedUp;
+        /// <summary>
+        /// Bytes received so far in the current header block, checked against <see cref="CurlHttpConfig.MaxResponseHeadersLength"/>.
+        /// </summary>
         long _currentHeadersLength = 0;
 
         readonly Action _onResume;
         readonly Action _onDispose;
-        readonly CurlEasy _handle;
         readonly CurlResponseStream _responseStream;
         readonly static CurlReadOrWriteCallback _onWriteCallback; // Download
         readonly static CurlReadOrWriteCallback _onHeaderReceivedCallback;
@@ -37,20 +38,28 @@ namespace MajdataPlay.Net.Curl.Core
             _onHeaderReceivedCallback = OnHeaderReceived;
         }
 
+        /// <summary>
+        /// Creates the response for a transfer and installs its body and header callbacks on <paramref name="handle"/>.
+        /// The easy handle stays owned by the <see cref="CurlTask"/>.
+        /// </summary>
+        /// <param name="handle">The easy handle that performs the transfer.</param>
+        /// <param name="request">The request being answered.</param>
+        /// <param name="onResume">Asks the owner to resume a transfer paused by body backpressure.</param>
+        /// <param name="onDispose">Tells the owner that the response or its body stream has been disposed.</param>
+        /// <param name="config">The handler settings captured when the request was sent.</param>
         internal CurlResponse(CurlEasy handle, CurlRequest request, Action onResume, Action onDispose, CurlHttpConfig config)
         {
-            _handle = handle;
             Request = request;
             Config = config;
             _onResume = onResume;
             _onDispose = onDispose;
-            _responseStream = new CurlResponseStream(config.MaxResponseHeadersLength, _onResume, _onDispose);
+            _responseStream = new CurlResponseStream(config.ResponseBodyBufferSize, _onResume, _onDispose);
             
             Content = new StreamContent(_responseStream);
             RequestMessage = Request.Message;
 
-            _handle.SetOption(CurlOption.WriteFunction, Marshal.GetFunctionPointerForDelegate(_onWriteCallback));
-            _handle.SetOption(CurlOption.HeaderFunction, Marshal.GetFunctionPointerForDelegate(_onHeaderReceivedCallback));
+            handle.SetOption(CurlOption.WriteFunction, Marshal.GetFunctionPointerForDelegate(_onWriteCallback));
+            handle.SetOption(CurlOption.HeaderFunction, Marshal.GetFunctionPointerForDelegate(_onHeaderReceivedCallback));
         }
 
         internal void Complete()
@@ -85,6 +94,15 @@ namespace MajdataPlay.Net.Curl.Core
 
             return responseStream.WriteChunk(buffer);
         }
+        /// <summary>
+        /// libcurl header callback. Called on the multi worker thread once per header line, including status lines,
+        /// the blank line that ends each header block, and the trailers of a chunked body.
+        /// </summary>
+        /// <param name="ptr">The header line; not NUL-terminated.</param>
+        /// <param name="size">Always 1.</param>
+        /// <param name="nmemb">The length of the line in bytes.</param>
+        /// <param name="userdata">The GC handle of the owning <see cref="CurlTask"/>.</param>
+        /// <returns>The line length to accept it, or 0 to abort the transfer.</returns>
         [MonoPInvokeCallback(typeof(CurlReadOrWriteCallback))]
         static unsafe UIntPtr OnHeaderReceived(IntPtr ptr, UIntPtr size, UIntPtr nmemb, IntPtr userdata)
         {
@@ -92,25 +110,35 @@ namespace MajdataPlay.Net.Curl.Core
             {
                 return UIntPtr.Zero;
             }
-            else if(curlTask.State != CurlTaskState.Submitted)
+            var state = curlTask.State;
+            // Trailers arrive after the first body byte has published the response, so HeaderRead is accepted too.
+            if (state != CurlTaskState.Submitted && state != CurlTaskState.HeaderRead)
             {
                 return UIntPtr.Zero;
             }
             var curlResponse = curlTask.Response;
-            var maxHeadersLength = curlTask.Config.MaxResponseHeadersLength;
             var length = (int)(size.ToUInt32() * nmemb.ToUInt32());
-            var buffer = new ReadOnlySpan<byte>((void*)ptr, length);
-            var line = buffer;
-            var currentHadersLength = Interlocked.Add(ref curlResponse._currentHeadersLength, line.Length);
-            TrimHttpHeader(ref line);
-
-            if (currentHadersLength > maxHeadersLength || currentHadersLength + line.Length > maxHeadersLength)
+            // Only the worker thread runs this callback, so the counter needs no synchronization.
+            var headersLength = curlResponse._currentHeadersLength + length;
+            if (headersLength > curlTask.Config.MaxResponseHeadersLength)
             {
-                Interlocked.Add(ref curlResponse._currentHeadersLength, -line.Length);
                 return UIntPtr.Zero;
             }
-
-            curlResponse.ParseHttpHeader(line);
+            var line = new ReadOnlySpan<byte>((void*)ptr, length);
+            TrimHttpHeader(ref line);
+            if (line.Length == 0)
+            {
+                // A blank line ends a header block (an interim or redirect response, or the final response), and the
+                // next block gets its own budget.
+                curlResponse._currentHeadersLength = 0;
+                return (UIntPtr)length;
+            }
+            curlResponse._currentHeadersLength = headersLength;
+            // Trailers are only counted: Headers already belongs to the caller, and Unity's .NET profile has no TrailingHeaders.
+            if (state == CurlTaskState.Submitted)
+            {
+                curlResponse.ParseHttpHeader(line);
+            }
 
             return (UIntPtr)length;
         }
@@ -336,20 +364,17 @@ namespace MajdataPlay.Net.Curl.Core
             }
             return span.Slice(start, length);
         }
-        internal void CleanUp()
-        {
-            if (Interlocked.Exchange(ref _isCleanedUp, 1) != 0)
-            {
-                return;
-            }
-            _handle.Dispose();
-            _responseStream.CleanUp();
-        }
+        /// <summary>
+        /// Releases the body buffers at once and asks the owner to release the native transfer.
+        /// </summary>
+        /// <param name="disposing">Whether the call comes from <see cref="HttpResponseMessage.Dispose()"/>.</param>
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
             if (disposing)
             {
+                // Content may have been replaced by the caller, so the body stream this response owns is disposed explicitly.
+                _responseStream.Dispose();
                 _onDispose();
             }
         }

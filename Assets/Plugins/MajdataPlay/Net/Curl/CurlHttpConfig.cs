@@ -17,7 +17,17 @@ namespace MajdataPlay.Net.Curl
         public SslProtocols SslProtocols { get; init; }
         public IWebProxy? Proxy { get; init; }
         public bool PreAuthenticate { get; init; }
+        /// <summary>
+        /// Gets the maximum length, in bytes, of one block of response headers: the status line and headers of an
+        /// interim or redirect response, of the final response, or the trailers. Unlike
+        /// <c>HttpClientHandler.MaxResponseHeadersLength</c>, which is in kilobytes, this value is in bytes.
+        /// </summary>
         public int MaxResponseHeadersLength { get; init; }
+        /// <summary>
+        /// Gets the number of response body bytes that may be buffered ahead of the reader. The transfer pauses when
+        /// the buffer would exceed 80% of this size and resumes once the reader has drained it to 40%.
+        /// </summary>
+        public int ResponseBodyBufferSize { get; init; }
         public long MaxRequestContentBufferSize { get; init; }
         public int MaxConnectionsPerServer { get; init; }
         public int MaxAutomaticRedirections { get; init; }
@@ -103,17 +113,8 @@ namespace MajdataPlay.Net.Curl
             returnCode = LibCurl.Easy.SetOption(easyHandle, CurlOption.SslVersion, sslVersion);
             CurlUtility.EnsureSuccess(easyHandle, returnCode);
 
-            if (!CheckCertificateRevocationList)
-            {
-                // CURLSSLOPT_NO_REVOKE = 2
-                returnCode = LibCurl.Easy.SetOption(easyHandle, CurlOption.SslOptions, 2L);
-                CurlUtility.EnsureSuccess(easyHandle, returnCode);
-            }
-            else
-            {
-                returnCode = LibCurl.Easy.SetOption(easyHandle, CurlOption.SslOptions, 0L);
-                CurlUtility.EnsureSuccess(easyHandle, returnCode);
-            }
+            returnCode = LibCurl.Easy.SetOption(easyHandle, CurlOption.SslOptions, (long)GetSslOptions());
+            CurlUtility.EnsureSuccess(easyHandle, returnCode);
 
             if(CookieContainer is not null)
             {
@@ -126,6 +127,21 @@ namespace MajdataPlay.Net.Curl
                 }
             }
 
+        }
+        /// <summary>
+        /// Combines every <c>CURLOPT_SSL_OPTIONS</c> bit for a request. libcurl stores the option as one bitmask, so
+        /// setting it more than once keeps only the last value.
+        /// </summary>
+        /// <returns>The platform's CA store bits, plus <see cref="CurlSslOption.NoRevoke"/> unless revocation checks are on.</returns>
+        internal readonly CurlSslOption GetSslOptions()
+        {
+            var options = CurlUtility.GetPlatformSslOptions();
+            if (!CheckCertificateRevocationList)
+            {
+                // Only the Schannel backend checks revocation; OpenSSL ignores this bit.
+                options |= CurlSslOption.NoRevoke;
+            }
+            return options;
         }
         readonly string GetEncodingString(DecompressionMethods methods)
         {
