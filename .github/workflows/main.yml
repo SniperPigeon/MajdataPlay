@@ -145,7 +145,7 @@ jobs:
           buildName: MajdataPlay
           buildsPath: ${{ env.CONFIGURATION }}
           androidExportType: androidStudioProject
-          androidSymbolType: public
+          androidSymbolType: debugging
 
       - name: Fix Directory Permissions
         run: sudo chown -R $USER:$USER ${{ env.CONFIGURATION }}/${{ env.TARGET_PLATFORM }}
