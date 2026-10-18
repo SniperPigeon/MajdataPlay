@@ -24,6 +24,7 @@ using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Profiling;
+using UnityEngine.Rendering;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 
@@ -218,6 +219,12 @@ namespace MajdataPlay.Scenes.Game
         protected override void Awake()
         {
             base.Awake();
+            var gameplayCamera = Camera.main;
+            if (gameplayCamera != null)
+            {
+                gameplayCamera.transparencySortMode = TransparencySortMode.CustomAxis;
+                gameplayCamera.transparencySortAxis = Vector3.forward;
+            }
             Majdata<GamePlayManager>.Instance = this;
             Majdata<INoteController>.Instance = this;
             Majdata<INoteTimeProvider>.Instance = this;

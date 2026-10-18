@@ -38,7 +38,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             SlideOK.IsClassic = IsClassic;
             SlideOK.transform.SetParent(Transform.parent);
 
-            starTransforms[0].position = Vector3.zero;
+            NoteHelper.Sorting.SetPosition(starTransforms[0], Vector3.zero);
             starTransforms[0].localScale = new Vector3(0f, 0f, 1f);
         }
         public override void Init()
@@ -79,7 +79,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             FadeInCutoffTiming = FadeInTiming + FadeInDurationTimeSec;
 
             var starTransforms = StarTransforms.Span;
-            starTransforms[0].position = StarPositions[0];
+            NoteHelper.Sorting.SetPosition(starTransforms[0], StarPositions[0]);
             starTransforms[0].transform.localScale = new Vector3(0f, 0f, 1f);
 
             SetActive(false);
@@ -189,7 +189,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             }
             var pose = metadata.OkPose;
             var rotZ = pose.RotZ;
-            SlideOK.transform.position = new Vector3(pose.X, pose.Y);
+            NoteHelper.Sorting.SetPosition(SlideOK.transform, new Vector3(pose.X, pose.Y));
             //SlideOK.transform.rotation = Quaternion.Euler(new Vector3(0, 0, pose.RotZ));
             //if (IsJustR)
             //{

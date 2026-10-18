@@ -96,7 +96,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             _pointObject.SetActive(true);
             _borderObject.SetActive(true);
 
-            Transform.position = new Vector3(0, 0, 0);
+            NoteHelper.Sorting.SetPosition(Transform, Vector3.zero);
             SetFansColor(new Color(1f, 1f, 1f, 0f));
             SetFansPosition(TouchFanStartDistance);
 
@@ -109,7 +109,8 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             }
             _borderRenderer.enabled = false;
 
-            Transform.localScale *= USERSETTING_TOUCH_SCALE;
+            var scale = Transform.localScale;
+            Transform.localScale = new Vector3(scale.x * USERSETTING_TOUCH_SCALE, scale.y * USERSETTING_TOUCH_SCALE, 1f);
         }
         public void Init(TouchHoldPoolingInfo poolingInfo)
         {
@@ -171,15 +172,17 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             SetFansColor(new Color(1f, 1f, 1f, 0f));
             SetActiveWithoutRenderer(true);
 
-            Transform.position = NoteHelper.GetTouchAreaPosition(SensorPos);
+            NoteHelper.Sorting.SetPosition(Transform, NoteHelper.GetTouchAreaPosition(SensorPos));
             SetFansPosition(TouchFanStartDistance);
 
             for (var i = 0; i < 4; i++)
             {
-                _fanRenderers[i].sortingOrder = SortOrder - (_fanSpriteSortOrder + i);
+                NoteHelper.Sorting.Apply(_fanRenderers[i], NoteHelper.Sorting.NoteLayer.Touch, SortOrder - (_fanSpriteSortOrder + i));
             }
-            _pointRenderer.sortingOrder = SortOrder - _pointBorderSortOrder;
-            _borderRenderer.SortingOrder = SortOrder - _borderSortOrder;
+            NoteHelper.Sorting.Apply(_pointRenderer, NoteHelper.Sorting.NoteLayer.Touch, SortOrder - _pointBorderSortOrder);
+            _borderRenderer.SortingLayerName = "Default";
+            _borderRenderer.SortingOrder = 0;
+            NoteHelper.Sorting.SetLocalZPosition(_borderObject.transform, NoteHelper.Sorting.GetZIndex(NoteHelper.Sorting.NoteLayer.TouchHoldBorder, SortOrder - _borderSortOrder));
 
             State = NoteStatus.Inited;
         }
@@ -677,6 +680,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             for (var i = 0; i < 4; i++)
             {
                 var pos = (0.226f + distance) * GetAngle(i);
+                pos.z = _fanTransforms[i].localPosition.z;
                 _fanTransforms[i].localPosition = pos;
             }
         }

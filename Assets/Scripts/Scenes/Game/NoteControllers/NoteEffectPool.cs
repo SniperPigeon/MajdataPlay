@@ -129,7 +129,9 @@ namespace MajdataPlay.Scenes.Game.Notes.Controllers
                 obj.name = $"TapEffect_{i + 1}";
                 obj.transform.rotation = rotation;
                 if (_gpManager != null && _gpManager.IsClassicMode)
-                    obj.transform.GetChild(0).localScale = new Vector3(1.4f, 1.4f, 0);
+                {
+                    obj.transform.GetChild(0).localScale = new Vector3(1.4f, 1.4f, 1f);
+                }
                 var displayer = obj.GetComponent<TapEffectDisplayer>();
                 displayer.DistanceRatio = MajEnv.Settings.Display.OuterJudgeDistance;
                 displayer.ResetAll();
@@ -207,12 +209,12 @@ namespace MajdataPlay.Scenes.Game.Notes.Controllers
                 if (pos < SensorArea.B1)
                 {
                     var position = NoteHelper.GetTapPosition(i + 1, 4.8f);
-                    obj.transform.position = position;
+                    NoteHelper.Sorting.SetPosition(obj.transform, position);
                 }
                 else
                 {
                     var position = NoteHelper.GetTouchAreaPosition(pos);
-                    obj.transform.position = position;
+                    NoteHelper.Sorting.SetPosition(obj.transform, position);
                 }
                 var displayer = obj.GetComponent<TouchFeedbackDisplayer>();
                 displayer.Reset();

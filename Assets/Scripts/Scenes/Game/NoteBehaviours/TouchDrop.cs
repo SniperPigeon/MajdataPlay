@@ -87,7 +87,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             _pointObject.SetActive(true);
             _justBorderObject.SetActive(true);
 
-            Transform.position = new Vector3(0, 0, 0);
+            NoteHelper.Sorting.SetPosition(Transform, Vector3.zero);
             SetFansColor(new Color(1f, 1f, 1f, 0f));
             SetFansPosition(TouchFanStartDistance);
 
@@ -99,7 +99,8 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                 renderer.enabled = false;
             }
 
-            Transform.localScale *= USERSETTING_TOUCH_SCALE;
+            var scale = Transform.localScale;
+            Transform.localScale = new Vector3(scale.x * USERSETTING_TOUCH_SCALE, scale.y * USERSETTING_TOUCH_SCALE, 1f);
         }
         public void Init(TouchPoolingInfo poolingInfo)
         {
@@ -140,7 +141,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
 
             LoadSkin();
 
-            Transform.position = NoteHelper.GetTouchAreaPosition(SensorPos);
+            NoteHelper.Sorting.SetPosition(Transform, NoteHelper.GetTouchAreaPosition(SensorPos));
             //_pointObject.SetActive(false);
             //_justBorderObject.SetActive(false);
 
@@ -150,10 +151,10 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
 
             for (var i = 0; i < 4; i++)
             {
-                _fanRenderers[i].sortingOrder = SortOrder - (_fanSpriteSortOrder + i);
+                NoteHelper.Sorting.Apply(_fanRenderers[i], NoteHelper.Sorting.NoteLayer.Touch, SortOrder - (_fanSpriteSortOrder + i));
             }
-            _pointRenderer.sortingOrder = SortOrder - _pointBorderSortOrder;
-            _justBorderRenderer.sortingOrder = SortOrder - _justBorderSortOrder;
+            NoteHelper.Sorting.Apply(_pointRenderer, NoteHelper.Sorting.NoteLayer.Touch, SortOrder - _pointBorderSortOrder);
+            NoteHelper.Sorting.Apply(_justBorderRenderer, NoteHelper.Sorting.NoteLayer.Touch, SortOrder - _justBorderSortOrder);
 
             State = NoteStatus.Inited;
         }
@@ -514,6 +515,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             for (var i = 0; i < 4; i++)
             {
                 var pos = (0.226f + distance) * GetAngle(i);
+                pos.z = _fanTransforms[i].localPosition.z;
                 _fanTransforms[i].localPosition = pos;
             }
         }

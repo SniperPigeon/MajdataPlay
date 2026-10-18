@@ -3,6 +3,7 @@ using MajdataPlay.Diagnostics;
 using MajdataPlay.Editor;
 using MajdataPlay.Numerics;
 using MajdataPlay.Scenes.Game.Notes.Slide;
+using MajdataPlay.Scenes.Game.Utils;
 using MajdataPlay.Settings;
 using System;
 using System.Runtime.CompilerServices;
@@ -61,7 +62,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
 
                             StarRenderer.color = new Color(1, 1, 1, 0);
                             starTransform.localScale = new Vector3(0, 0, 1);
-                            starTransform.position = StarPositions[0];
+                            NoteHelper.Sorting.SetPosition(starTransform, StarPositions[0]);
                             ApplyStarRotation(StarRotations[0]);
                             State = NoteStatus.Scaling;
                             goto case NoteStatus.Scaling;
@@ -107,7 +108,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                         var remaingTimeWithoutOffset = GetRemainingTimeWithoutOffset();
                         if (remaingTimeWithoutOffset == 0)
                         {
-                            starTransform.position = StarPositions[StarPositions.Count - 1];
+                            NoteHelper.Sorting.SetPosition(starTransform, StarPositions[StarPositions.Count - 1]);
                             ApplyStarRotation(StarRotations[StarRotations.Count - 1]);
                             if (ConnectInfo.IsConnSlide && !ConnectInfo.IsGroupPartEnd)
                             {
@@ -129,7 +130,7 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
                             StarRotations[index + 1],
                             pos
                         );
-                        starTransform.position = newPosition;
+                        NoteHelper.Sorting.SetPosition(starTransform, newPosition);
                         ApplyStarRotation(newRotation);
                         break;
                     case NoteStatus.Arrived:
@@ -380,13 +381,13 @@ namespace MajdataPlay.Scenes.Game.Notes.Behaviours
             foreach (var renderer in barRenderers)
             {
                 renderer.color = new Color(1f, 1f, 1f, 0f);
-                renderer.sortingOrder = SortOrder--;
-                renderer.sortingLayerName = "Slides";
+                NoteHelper.Sorting.Apply(renderer, NoteHelper.Sorting.NoteLayer.Slides, SortOrder--);
 
                 renderer.sprite = barSprite;
             }
 
             var starRenderer = star.GetComponent<SpriteRenderer>();
+            NoteHelper.Sorting.Apply(starRenderer, NoteHelper.Sorting.NoteLayer.SlideStars);
             starRenderer.sprite = starSprite;
             if (breakMaterial is not null)
             {
