@@ -200,6 +200,14 @@ namespace MajdataPlay.IO
                                 Interface = 1,
                                 PacketSize = 64
                             };
+                            ButtonRingHidConnInfo = new()
+                            {
+                                DeviceName = buttonRingSettings.HidOptions.DeviceName ?? string.Empty,
+                                ProductId = buttonRingSettings.HidOptions.ProductId ?? (playerIndex == 1 ? GENERAL_HID_1P_PID : GENERAL_HID_2P_PID),
+                                VendorId = buttonRingSettings.HidOptions.VendorId ?? (playerIndex == 1 ? GENERAL_HID_1P_VID : GENERAL_HID_2P_VID),
+                                Exclusice = buttonRingSettings.HidOptions.Exclusice,
+                                OpenPriority = buttonRingSettings.HidOptions.OpenPriority
+                            };
                             LedDeviceSerialConnInfo = new()
                             {
 #if UNITY_STANDALONE_WIN
