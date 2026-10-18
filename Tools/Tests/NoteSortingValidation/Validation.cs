@@ -19,12 +19,33 @@ namespace NoteSortingValidation
     public static class Validation
     {
         /// <summary>
+        /// The expected distance between adjacent gameplay groups.
+        /// </summary>
+        private const float LayerSpacing = 0.5f;
+
+        /// <summary>
+        /// The expected depth between adjacent sort orders (2^-17).
+        /// </summary>
+        private const float OrderStep = 1f / 131072f;
+
+        /// <summary>
+        /// The serialized ID of the stripped gameplay Camera in Init.unity, also referenced by GlobalCanvas.
+        /// </summary>
+        private const long GameplayCameraId = 550395852;
+
+        /// <summary>
+        /// Gets the repository root that contains the isolated validation project.
+        /// </summary>
+        private static string RepositoryRoot => Path.GetFullPath(Path.Combine(Application.dataPath, "../../.."));
+
+        /// <summary>
         /// Runs helper, asset and desktop rendering regressions.
         /// </summary>
         /// <exception cref="InvalidOperationException">A regression check fails.</exception>
         public static void Run()
         {
             ValidateDepthOrder();
+            ValidateWorldPrecision();
             ValidateTransforms();
             ValidateNestedRenderers();
             ValidateRendering();
@@ -40,6 +61,7 @@ namespace NoteSortingValidation
         public static void RunWithoutRendering()
         {
             ValidateDepthOrder();
+            ValidateWorldPrecision();
             ValidateTransforms();
             ValidateNestedRenderers();
             ValidateAssets();
@@ -47,26 +69,35 @@ namespace NoteSortingValidation
         }
 
         /// <summary>
-        /// Checks category isolation, long-chart orders and component priorities.
+        /// Checks category bands, the exact order grid, out-of-range clamping and component priorities.
         /// </summary>
         /// <exception cref="InvalidOperationException">A depth check fails.</exception>
         private static void ValidateDepthOrder()
         {
             var layers = (Sorting.NoteLayer[])Enum.GetValues(typeof(Sorting.NoteLayer));
-            var orders = new[] { int.MinValue, -1000000, -65536, -32769, -32768, -1, 0, 1, 32767, 32768, 32769, 65536, 1000000, int.MaxValue };
             for (var i = 0; i < layers.Length; i++)
             {
                 var layer = layers[i];
-                Near(Sorting.GetZIndex(layer), -i * 0.4f, $"Category {layer}");
-                for (var j = 0; j < orders.Length; j++)
+                var back = -i * LayerSpacing;
+                var front = back - LayerSpacing;
+                Check(Sorting.GetZIndex(layer, short.MinValue) == back, $"Category {layer} back boundary");
+                Check(Sorting.GetZIndex(layer) == back - (LayerSpacing / 2), $"Category {layer} center");
+                var previous = float.PositiveInfinity;
+                for (var order = (int)short.MinValue; order <= short.MaxValue; order++)
                 {
-                    var z = Sorting.GetZIndex(layer, orders[j]);
-                    Check(!float.IsNaN(z) && !float.IsInfinity(z), $"Finite depth {layer}/{orders[j]}");
-                    Check(Math.Abs(z + i * 0.4f) <= 0.150001f, $"Bounded depth {layer}/{orders[j]}");
-                    if (j > 0)
-                    {
-                        Check(z < Sorting.GetZIndex(layer, orders[j - 1]), $"Long-chart priority {layer}/{orders[j]}");
-                    }
+                    var z = Sorting.GetZIndex(layer, order);
+                    Check(z <= back && z > front, $"Bounded depth {layer}/{order}");
+                    Check(z == back - ((order - short.MinValue) * OrderStep), $"Exact grid depth {layer}/{order}");
+                    Check(z < previous, $"Adjacent order priority {layer}/{order}");
+                    previous = z;
+                }
+                foreach (var order in new[] { int.MinValue, -1000000, -65536, -32769 })
+                {
+                    Check(Sorting.GetZIndex(layer, order) == back, $"Clamped low order {layer}/{order}");
+                }
+                foreach (var order in new[] { 32768, 65536, 1000000, int.MaxValue })
+                {
+                    Check(Sorting.GetZIndex(layer, order) == Sorting.GetZIndex(layer, short.MaxValue), $"Clamped high order {layer}/{order}");
                 }
                 if (i > 0)
                 {
@@ -74,7 +105,7 @@ namespace NoteSortingValidation
                 }
             }
 
-            foreach (var order in new[] { -65536, -32769, -32768, -3, 0, 32767, 32768, 65536 })
+            foreach (var order in new[] { -32762, -3, 0, 32767 })
             {
                 var body = Sorting.GetZIndex(Sorting.NoteLayer.Tap, order - 1);
                 var end = Sorting.GetZIndex(Sorting.NoteLayer.Tap, order - 2);
@@ -91,7 +122,238 @@ namespace NoteSortingValidation
                     previous = z;
                 }
             }
-            Debug.Log("NOTE_SORTING_DEPTH_PASSED: all categories, signed 16-bit boundaries, int32 extremes and component priorities");
+            Debug.Log("NOTE_SORTING_DEPTH_PASSED: all categories, every signed 16-bit order, clamped int32 extremes and component priorities");
+        }
+
+        /// <summary>
+        /// Checks that every adjacent order keeps a distinct, exact world depth under the serialized gameplay pools,
+        /// stays behind the note effects and keeps a distinct camera distance.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">A world depth check fails.</exception>
+        private static void ValidateWorldPrecision()
+        {
+            var depths = ReadGameplayDepths();
+            var layers = (Sorting.NoteLayer[])Enum.GetValues(typeof(Sorting.NoteLayer));
+            var parent = new GameObject("World precision pool");
+            var child = new GameObject("World precision sprite");
+            var checkedOrders = 0;
+            try
+            {
+                child.transform.SetParent(parent.transform, false);
+                foreach (var poolZ in depths.PoolZ)
+                {
+                    parent.transform.position = new Vector3(0, 0, poolZ);
+                    var previousWorld = float.PositiveInfinity;
+                    var previousDistance = float.PositiveInfinity;
+                    for (var i = 0; i < layers.Length; i++)
+                    {
+                        for (var order = (int)short.MinValue; order <= short.MaxValue; order++)
+                        {
+                            var local = Sorting.GetZIndex(layers[i], order);
+                            Sorting.SetLocalZPosition(child.transform, local);
+                            var world = child.transform.position.z;
+                            var distance = world - depths.CameraZ;
+                            Check(world == poolZ + local, $"Exact world depth {poolZ}/{layers[i]}/{order}: {world}");
+                            Check(world < previousWorld, $"Distinct world depth {poolZ}/{layers[i]}/{order}: {world}");
+                            Check(distance < previousDistance, $"Distinct camera distance {poolZ}/{layers[i]}/{order}: {distance}");
+                            Check(world > depths.EffectsZ, $"Behind note effects {poolZ}/{layers[i]}/{order}: {world}");
+                            Check(Math.Abs(world) < 128 && Math.Abs(distance) < 128, $"Exact grid range {poolZ}/{layers[i]}/{order}");
+                            previousWorld = world;
+                            previousDistance = distance;
+                            checkedOrders++;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(child);
+                Object.DestroyImmediate(parent);
+            }
+            ValidateWorldNotes(depths.PoolZ[0]);
+            Debug.Log($"NOTE_SORTING_WORLD_PASSED: {checkedOrders} orders at pool depths [{string.Join(", ", depths.PoolZ)}], " +
+                $"note effects {depths.EffectsZ}, camera {depths.CameraZ}");
+        }
+
+        /// <summary>
+        /// Checks real Tap, Hold, Touch and TouchHold hierarchies for consecutive notes at the gameplay pool depth.
+        /// Earlier notes must keep every component in front of every component of the next note.
+        /// </summary>
+        /// <param name="poolZ">The serialized world depth of the gameplay note pools.</param>
+        /// <exception cref="InvalidOperationException">A component or note priority check fails.</exception>
+        private static void ValidateWorldNotes(float poolZ)
+        {
+            // Offsets mirror TapDrop, HoldDrop, TouchDrop and TouchHoldDrop; strides mirror NoteLoader.NOTE_LAYER_COUNT.
+            var notes = new[]
+            {
+                (Name: "Tap", Layer: Sorting.NoteLayer.Tap, Stride: 2, Root: 1, Children: new[] { 0 }, Nested: true),
+                (Name: "Hold", Layer: Sorting.NoteLayer.Tap, Stride: 3, Root: 1, Children: new[] { 0, 2 }, Nested: true),
+                (Name: "Touch", Layer: Sorting.NoteLayer.Touch, Stride: 6, Root: 1, Children: new[] { 2, 3, 4, 5, 6 }, Nested: false),
+                (Name: "TouchHold", Layer: Sorting.NoteLayer.Touch, Stride: 6, Root: 1, Children: new[] { 2, 3, 4, 5 }, Nested: false),
+            };
+            var pool = new GameObject("World notes pool");
+            try
+            {
+                pool.transform.position = new Vector3(0, 0, poolZ);
+                foreach (var note in notes)
+                {
+                    var noteObject = new GameObject(note.Name);
+                    noteObject.transform.SetParent(pool.transform, false);
+                    var rootRenderer = note.Nested ? noteObject.AddComponent<SpriteRenderer>() : CreateChildRenderer(noteObject.transform);
+                    var childRenderers = new SpriteRenderer[note.Children.Length];
+                    for (var i = 0; i < childRenderers.Length; i++)
+                    {
+                        childRenderers[i] = CreateChildRenderer(note.Nested ? rootRenderer.transform : noteObject.transform);
+                    }
+                    var deepestOffset = note.Root;
+                    foreach (var offset in note.Children)
+                    {
+                        deepestOffset = Math.Max(deepestOffset, offset);
+                    }
+                    var previousBack = float.NegativeInfinity;
+                    var count = 0;
+                    for (var sortOrder = (int)short.MaxValue; sortOrder - deepestOffset >= short.MinValue; sortOrder -= note.Stride)
+                    {
+                        Sorting.Apply(rootRenderer, note.Layer, sortOrder - note.Root);
+                        var parentZIndex = note.Nested ? rootRenderer.transform.localPosition.z : 0f;
+                        var front = float.PositiveInfinity;
+                        var back = float.NegativeInfinity;
+                        var depths = new List<(int Offset, float World)> { (note.Root, rootRenderer.transform.position.z) };
+                        for (var i = 0; i < childRenderers.Length; i++)
+                        {
+                            Sorting.Apply(childRenderers[i], note.Layer, sortOrder - note.Children[i], parentZIndex);
+                            depths.Add((note.Children[i], childRenderers[i].transform.position.z));
+                        }
+                        foreach (var (offset, world) in depths)
+                        {
+                            Check(world == poolZ + Sorting.GetZIndex(note.Layer, sortOrder - offset), $"{note.Name} exact component depth {sortOrder}/{offset}");
+                            front = Math.Min(front, world);
+                            back = Math.Max(back, world);
+                            foreach (var (otherOffset, otherWorld) in depths)
+                            {
+                                Check(offset >= otherOffset || world < otherWorld, $"{note.Name} component priority {sortOrder}/{offset}/{otherOffset}");
+                            }
+                        }
+                        Check(previousBack < front, $"{note.Name} earlier note stays in front {sortOrder}");
+                        previousBack = back;
+                        count++;
+                    }
+                    Check(count == (short.MaxValue - short.MinValue + 1) / note.Stride, $"{note.Name} capacity {count}");
+                    Debug.Log($"NOTE_SORTING_WORLD_NOTES_PASSED: {note.Name}, {count} consecutive notes");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(pool);
+            }
+
+            /// <summary>Creates a sprite renderer under a note transform.</summary>
+            /// <param name="parent">The note transform.</param>
+            /// <returns>The new child renderer.</returns>
+            SpriteRenderer CreateChildRenderer(Transform parent)
+            {
+                var child = new GameObject("Component");
+                child.transform.SetParent(parent, false);
+                return child.AddComponent<SpriteRenderer>();
+            }
+        }
+
+        /// <summary>
+        /// Reads the serialized world depths of the gameplay note pools, the note effects and the gameplay camera.
+        /// </summary>
+        /// <returns>The distinct pool depths, the note effect depth and the camera depth.</returns>
+        /// <exception cref="InvalidOperationException">A required object or transform is missing or tilted.</exception>
+        private static (float[] PoolZ, float EffectsZ, float CameraZ) ReadGameplayDepths()
+        {
+            var game = File.ReadAllText(Path.Combine(RepositoryRoot, "Assets/Scenes/Game.unity"));
+            var init = File.ReadAllText(Path.Combine(RepositoryRoot, "Assets/Scenes/Init.unity"));
+            var poolDepths = new List<float>();
+            foreach (var name in new[] { "TapPool", "HoldPool", "TouchPool", "TouchHoldPool", "SlidePool", "SlideArrowPool", "EachLines", "TapLines" })
+            {
+                var z = ReadWorldZ(game, name);
+                if (!poolDepths.Contains(z))
+                {
+                    poolDepths.Add(z);
+                }
+            }
+            var effectsZ = ReadWorldZ(game, "NoteEffects");
+
+            var camera = Regex.Match(init, @"(?ms)^--- !u!20 &" + GameplayCameraId + @" stripped\r?\nCamera:\r?\n(?<body>.*?)(?=^--- !u!|\z)");
+            Check(camera.Success, "Gameplay camera exists");
+            var instanceId = Regex.Match(camera.Groups["body"].Value, @"m_PrefabInstance: \{fileID: (\d+)\}");
+            Check(instanceId.Success, "Gameplay camera prefab instance");
+            var instance = Regex.Match(init, @"(?ms)^--- !u!1001 &" + instanceId.Groups[1].Value + @"\r?\nPrefabInstance:\r?\n(?<body>.*?)(?=^--- !u!|\z)");
+            Check(instance.Success, "Gameplay camera prefab instance exists");
+            var cameraZ = ReadOverride(instance.Groups["body"].Value, "m_LocalPosition.z");
+            Check(ReadOverride(instance.Groups["body"].Value, "m_LocalRotation.x") == 0 &&
+                ReadOverride(instance.Groups["body"].Value, "m_LocalRotation.y") == 0, "Gameplay camera faces forward");
+            return (poolDepths.ToArray(), effectsZ, cameraZ);
+
+            /// <summary>Reads one numeric prefab override.</summary>
+            /// <param name="body">The prefab instance text.</param>
+            /// <param name="property">The overridden property path.</param>
+            /// <returns>The override value.</returns>
+            /// <exception cref="InvalidOperationException">The override is missing.</exception>
+            float ReadOverride(string body, string property)
+            {
+                var match = Regex.Match(body, @"propertyPath: " + Regex.Escape(property) + @"\r?\n\s+value: (?<value>[^\r\n]+)");
+                Check(match.Success, $"Gameplay camera override {property}");
+                return float.Parse(match.Groups["value"].Value, CultureInfo.InvariantCulture);
+            }
+        }
+
+        /// <summary>
+        /// Reads the world Z of a uniquely named scene object whose ancestors only translate, rotate around Z and keep Z scale one.
+        /// </summary>
+        /// <param name="scene">The scene text.</param>
+        /// <param name="name">The GameObject name.</param>
+        /// <returns>The world Z coordinate.</returns>
+        /// <exception cref="InvalidOperationException">The object is missing, ambiguous, tilted or Z-scaled.</exception>
+        private static float ReadWorldZ(string scene, string name)
+        {
+            var objects = Regex.Matches(scene, @"(?ms)^--- !u!1 &(?<id>\d+)\r?\nGameObject:\r?\n(?<body>(?:(?!^--- !u!).)*?^  m_Name: " + Regex.Escape(name) + @"\r?$)");
+            Check(objects.Count == 1, $"Unique scene object {name}");
+            var gameObjectId = objects[0].Groups["id"].Value;
+            var transform = FindTransform(@"m_GameObject: \{fileID: " + gameObjectId + @"\}");
+            var z = 0f;
+            while (true)
+            {
+                var body = transform.Groups["body"].Value;
+                var rotation = Regex.Match(body, @"m_LocalRotation: \{x: (?<x>[^,]+), y: (?<y>[^,]+),");
+                var position = Regex.Match(body, @"m_LocalPosition: \{x: [^,]+, y: [^,]+, z: (?<z>[^}]+)\}");
+                var scale = Regex.Match(body, @"m_LocalScale: \{x: [^,]+, y: [^,]+, z: (?<z>[^}]+)\}");
+                Check(rotation.Success && position.Success && scale.Success, $"Transform of {name}");
+                Check(float.Parse(rotation.Groups["x"].Value, CultureInfo.InvariantCulture) == 0 &&
+                    float.Parse(rotation.Groups["y"].Value, CultureInfo.InvariantCulture) == 0, $"{name} ancestors only rotate around Z");
+                Check(float.Parse(scale.Groups["z"].Value, CultureInfo.InvariantCulture) == 1, $"{name} ancestors keep Z scale one");
+                z += float.Parse(position.Groups["z"].Value, CultureInfo.InvariantCulture);
+                var father = Regex.Match(body, @"m_Father: \{fileID: (?<id>-?\d+)\}");
+                Check(father.Success, $"Father of {name}");
+                if (father.Groups["id"].Value == "0")
+                {
+                    return z;
+                }
+                transform = FindTransform(@"^--- !u!4 &" + father.Groups["id"].Value + @"\r?$");
+            }
+
+            /// <summary>Finds one Transform document that matches a pattern.</summary>
+            /// <param name="pattern">The pattern matched against the document header and body.</param>
+            /// <returns>The matching Transform document.</returns>
+            /// <exception cref="InvalidOperationException">No unique Transform matches.</exception>
+            Match FindTransform(string pattern)
+            {
+                Match? found = null;
+                foreach (Match document in Regex.Matches(scene, @"(?ms)^--- !u!4 &\d+\r?\nTransform:\r?\n(?<body>.*?)(?=^--- !u!|\z)"))
+                {
+                    if (Regex.IsMatch(document.Value, pattern, RegexOptions.Multiline))
+                    {
+                        Check(found == null, $"Unique transform for {name}");
+                        found = document;
+                    }
+                }
+                Check(found != null, $"Transform for {name}");
+                return found!;
+            }
         }
 
         /// <summary>
@@ -204,7 +466,7 @@ namespace NoteSortingValidation
                 var body = bodyObject.AddComponent<SpriteRenderer>();
                 var ex = exObject.AddComponent<SpriteRenderer>();
                 var end = endObject.AddComponent<SpriteRenderer>();
-                foreach (var order in new[] { -32768, 0, 32768 })
+                foreach (var order in new[] { -32766, 0, 32767 })
                 {
                     var bodyZ = Sorting.GetZIndex(Sorting.NoteLayer.Tap, order - 1);
                     var exZ = Sorting.GetZIndex(Sorting.NoteLayer.Tap, order);
@@ -251,7 +513,7 @@ namespace NoteSortingValidation
         /// <exception cref="InvalidOperationException">An asset check fails.</exception>
         private static void ValidateAssets()
         {
-            var root = Path.GetFullPath(Path.Combine(Application.dataPath, "../../.."));
+            var root = RepositoryRoot;
             var files = Directory.GetFiles(Path.Combine(root, "Assets/Prefabs/Game"), "*.prefab", SearchOption.AllDirectories);
             var prefabPaths = new Dictionary<string, string>();
             foreach (var meta in Directory.GetFiles(Path.Combine(root, "Assets"), "*.prefab.meta", SearchOption.AllDirectories))
@@ -408,6 +670,7 @@ namespace NoteSortingValidation
             var cameraObject = new GameObject("Sorting camera");
             var rearObject = new GameObject("Rear red sprite");
             var frontObject = new GameObject("Front green sprite");
+            var depthParentObject = new GameObject("Gameplay pool depth");
             var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             var target = new RenderTexture(64, 64, 16, RenderTextureFormat.ARGB32);
             var readback = new Texture2D(64, 64, TextureFormat.RGBA32, false);
@@ -453,6 +716,38 @@ namespace NoteSortingValidation
                 }
                 Check((front.transform.position - camera.transform.position).sqrMagnitude > (rear.transform.position - camera.transform.position).sqrMagnitude,
                     "The XY fixture opposes distance sorting");
+
+                // Adjacent orders are one 2^-17 step apart; render them at the serialized pool and camera depths.
+                var depths = ReadGameplayDepths();
+                depthParentObject.transform.position = new Vector3(0, 0, depths.PoolZ[0]);
+                rear.transform.SetParent(depthParentObject.transform, false);
+                front.transform.SetParent(depthParentObject.transform, false);
+                camera.transform.position = new Vector3(0, 0, depths.CameraZ);
+                camera.farClipPlane = 200;
+                var pairs = new[]
+                {
+                    (FrontLayer: Sorting.NoteLayer.Tap, FrontOrder: 32767, RearLayer: Sorting.NoteLayer.Tap, RearOrder: 32766),
+                    (FrontLayer: Sorting.NoteLayer.Tap, FrontOrder: -32767, RearLayer: Sorting.NoteLayer.Tap, RearOrder: -32768),
+                    (FrontLayer: Sorting.NoteLayer.Touch, FrontOrder: 1, RearLayer: Sorting.NoteLayer.Touch, RearOrder: 0),
+                    (FrontLayer: Sorting.NoteLayer.Tap, FrontOrder: (int)short.MinValue, RearLayer: Sorting.NoteLayer.TapLines, RearOrder: (int)short.MaxValue),
+                };
+                foreach (var pair in pairs)
+                {
+                    foreach (var reverse in new[] { false, true })
+                    {
+                        Sorting.Apply(front, reverse ? pair.RearLayer : pair.FrontLayer, reverse ? pair.RearOrder : pair.FrontOrder);
+                        Sorting.Apply(rear, reverse ? pair.FrontLayer : pair.RearLayer, reverse ? pair.FrontOrder : pair.RearOrder);
+                        Check(Math.Abs(front.transform.position.z - rear.transform.position.z) == OrderStep, $"Adjacent render fixture depth {pair}");
+                        camera.Render();
+                        RenderTexture.active = target;
+                        readback.ReadPixels(new Rect(0, 0, 64, 64), 0, 0);
+                        readback.Apply();
+                        var sample = readback.GetPixel(40, 40);
+                        Check(reverse ? sample.r > 0.9f && sample.g < 0.1f : sample.g > 0.9f && sample.r < 0.1f,
+                            $"Adjacent order wins at pool depth ({pair}, reversed {reverse}): {sample}");
+                    }
+                }
+                Debug.Log($"NOTE_SORTING_RENDER_ADJACENT_PASSED: {pairs.Length} one-step pairs at pool depth {depths.PoolZ[0]}, camera {depths.CameraZ}");
                 Debug.Log($"NOTE_SORTING_RENDER_DEVICE: {SystemInfo.graphicsDeviceType}, {SystemInfo.graphicsDeviceName}");
             }
             finally
@@ -461,6 +756,7 @@ namespace NoteSortingValidation
                 Object.DestroyImmediate(cameraObject);
                 Object.DestroyImmediate(rearObject);
                 Object.DestroyImmediate(frontObject);
+                Object.DestroyImmediate(depthParentObject);
                 Object.DestroyImmediate(sprite);
                 Object.DestroyImmediate(texture);
                 Object.DestroyImmediate(readback);

@@ -31,14 +31,15 @@ foreach ($source in @('Assets/Scripts/Scenes/Game/Utils/NoteHelper.cs',
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Validation.cs') -Destination $assets
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Services.cs') -Destination $assets
-$animationRoot = Join-Path $root 'Assets/Animation'
+$animationRoot = [IO.Path]::GetFullPath((Join-Path $root 'Assets/Animation'))
 $animationFiles = @()
 foreach ($directory in @('NoteEffects', 'TouchEffects', 'OutlineEffect')) {
     $animationFiles += Get-ChildItem -LiteralPath (Join-Path $animationRoot $directory) -File -Filter '*.anim' -Recurse
 }
 $animationFiles += Get-Item -LiteralPath (Join-Path $animationRoot 'UI/TouchFeedbackAnim.anim')
 foreach ($file in $animationFiles) {
-    $relative = [IO.Path]::GetRelativePath($animationRoot, $file.FullName)
+    # Windows PowerShell 5.1 has no Path.GetRelativePath; every file is enumerated below the normalized root.
+    $relative = $file.FullName.Substring($animationRoot.Length).TrimStart('\', '/')
     $target = Join-Path $assets (Join-Path 'Animation' $relative)
     New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
     Copy-Item -LiteralPath $file.FullName -Destination $target

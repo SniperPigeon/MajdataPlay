@@ -16,23 +16,22 @@ namespace MajdataPlay.Scenes.Game.Utils
         /// <summary>
         /// Converts the gameplay sprite stack to parent-relative Z coordinates.
         /// Smaller Z coordinates are drawn closer to the gameplay camera.
+        /// Every Z index lies on an exact binary grid, so adjacent orders stay distinct after
+        /// the parent depth is added, as long as world Z and camera distance stay below 128 units.
         /// </summary>
         internal static class Sorting
         {
             /// <summary>
             /// Separates adjacent gameplay groups in their parent plane.
+            /// A power of two keeps every group boundary exactly representable.
             /// </summary>
-            private const float LayerSpacing = 0.4f;
+            private const float LayerSpacing = 0.5f;
 
             /// <summary>
-            /// Limits order offsets to less than half the distance between groups.
+            /// Separates adjacent sort orders by 2^-17, so the signed 16-bit order range fills one group.
+            /// Every multiple of 2^-17 below 128 is an exact float, including the Notes depth of 100.
             /// </summary>
-            private const double OrderDepth = 0.15d;
-
-            /// <summary>
-            /// Spreads the original signed 16-bit order range around each group's center.
-            /// </summary>
-            private const double OrderScale = 32768d;
+            private const float OrderStep = 1f / 131072f;
 
             /// <summary>
             /// Identifies the back-to-front groups of gameplay sprites.
@@ -56,16 +55,20 @@ namespace MajdataPlay.Scenes.Game.Utils
             }
 
             /// <summary>
-            /// Gets a sprite's Z index without the signed 16-bit renderer order limit.
-            /// Each group occupies a disjoint, bounded depth range relative to its parent.
+            /// Gets a sprite's Z index on an exact grid of one step per sort order.
+            /// Each group occupies the disjoint range (-(layer + 1) * 0.5, -layer * 0.5] relative to its parent.
             /// </summary>
             /// <param name="layer">The sprite's gameplay group.</param>
-            /// <param name="sortOrder">The front-to-back priority; larger values appear in front.</param>
+            /// <param name="sortOrder">
+            /// The front-to-back priority; larger values appear in front.
+            /// Values outside the signed 16-bit range are clamped and share the boundary depth.
+            /// </param>
             /// <returns>The local Z index for the sprite's gameplay group.</returns>
             internal static float GetZIndex(NoteLayer layer, int sortOrder = 0)
             {
-                var offset = OrderDepth * sortOrder / (OrderScale + Math.Abs((double)sortOrder));
-                return (-(int)layer * LayerSpacing) - (float)offset;
+                var clampedOrder = Math.Clamp(sortOrder, short.MinValue, short.MaxValue);
+                var orderIndex = clampedOrder - short.MinValue;
+                return (-(int)layer * LayerSpacing) - (orderIndex * OrderStep);
             }
 
             /// <summary>
