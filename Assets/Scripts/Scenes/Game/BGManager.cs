@@ -43,6 +43,11 @@ namespace MajdataPlay.Scenes.Game
         private bool _usePictureAsBackground = true;
         private int _videoLoadVersion;
 
+        /// <summary>
+        /// Indicates whether this manager has released its playback resources.
+        /// </summary>
+        private bool _destroyed;
+
         protected override void Awake()
         {
             base.Awake();
@@ -65,6 +70,7 @@ namespace MajdataPlay.Scenes.Game
 
         private void OnDestroy()
         {
+            _destroyed = true;
             ++_videoLoadVersion;
             if (_videoPlayer != null)
             {
@@ -153,6 +159,10 @@ namespace MajdataPlay.Scenes.Game
 
         public async UniTask SetMovieAsync(string path, Sprite? fallback)
         {
+            if (_destroyed)
+            {
+                return;
+            }
             SetBackgroundPic(fallback);
             _videoFallback = fallback;
             var loadVersion = _videoLoadVersion;

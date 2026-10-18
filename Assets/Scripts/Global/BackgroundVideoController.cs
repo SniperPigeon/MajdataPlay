@@ -1,12 +1,6 @@
-using Live2D.Cubism.Rendering.URP.RenderingInterceptor;
 using MajdataPlay.Diagnostics;
 using MajdataPlay.FFmpeg;
-using MajdataPlay.Runtime;
-using System;
-using System.Linq;
-using System.Reflection;
 using UnityEngine;
-using UnityEngine.Video;
 #nullable enable
 namespace MajdataPlay
 {
@@ -15,13 +9,10 @@ namespace MajdataPlay
     {
         [SerializeField]
         FFmpegVideoPlayer _videoPlayer = null!;
+        // 背景保留普通 SpriteRenderer 绘制：不透明队列先画背景，再由 MRP 绘制 Live2D。
+        // 显示/隐藏通过下面的 layer 切换完成，不再随场景切换接入 Cubism 合成 RT。
         [SerializeField]
         SpriteRenderer _videoRenderer = null!;
-
-        [SerializeField]
-        CubismRenderingInterceptController _renderingInterrupter;
-
-        MajScenes[] _containsCubismComponentScenes = Array.Empty<MajScenes>();
 
         protected override void Awake()
         {
@@ -31,14 +22,6 @@ namespace MajdataPlay
             {
                 MajDebug.LogError("Global background video references are not configured.");
             }
-            SceneSwitcher.OnSceneChanged += OnSceneChanged;
-            var scenes = (MajScenes[])Enum.GetValues(typeof(MajScenes));
-            _containsCubismComponentScenes = scenes.Where(scene =>
-                                                    {
-                                                        var field = typeof(MajScenes).GetField(scene.ToString());
-                                                        return field?.GetCustomAttribute<ContainsCubismComponentAttribute>() != null;
-                                                    })
-                                                    .ToArray();
         }
 
         public void Pause()
@@ -66,20 +49,6 @@ namespace MajdataPlay
         {
             _videoRenderer.gameObject.layer = MajEnv.DEFAULT_LAYER;
             Play();
-        }
-
-        private void OnSceneChanged(object? sender, (MajScenes NewScene, MajScenes OldScene) args)
-        {
-            if (_renderingInterrupter is null)
-            {
-                return;
-            }
-            if (!(PlatformInfo.IsAndroid && PlatformInfo.IsArmV7Processor))
-            {
-                var isContainsCubismComponent = Array.IndexOf(_containsCubismComponentScenes, args.NewScene) != -1;
-                _renderingInterrupter.enabled = isContainsCubismComponent;
-                _videoRenderer.enabled = !isContainsCubismComponent;
-            }
         }
     }
 }
