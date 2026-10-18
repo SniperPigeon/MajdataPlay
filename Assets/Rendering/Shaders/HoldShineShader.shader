@@ -17,7 +17,7 @@ Shader "Maj/Effects/HoldShineShader"
 				{
 			    Name "HoldShine"
 			Tags { "LightMode" = "SRPDefaultUnlit" }
-			ZTest Always
+			ZTest LEqual
 			Cull Off
 			ZWrite Off
 			Blend SrcAlpha OneMinusSrcAlpha
