@@ -883,6 +883,10 @@ namespace MajdataPlay.IO
                             //return "SkyStar Maimoller";
                             return string.Empty;
                         }
+                        else if (manufacturer == DeviceManufacturerOption.Nov)
+                        {
+                            return string.Empty;
+                        }
                         else
                         {
                             throw new NotSupportedException();
