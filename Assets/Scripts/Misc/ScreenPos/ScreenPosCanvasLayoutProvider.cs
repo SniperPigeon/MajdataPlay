@@ -19,7 +19,7 @@ namespace MajdataPlay
         /// <summary>
         /// The reference resolution used when <c>GlobalCanvas</c> has no <see cref="CanvasScaler"/>.
         /// </summary>
-        static readonly Vector2 s_defaultReferenceResolution = new Vector2(1080f, 1920f);
+        private static readonly Vector2 s_defaultReferenceResolution = new Vector2(1080f, 1920f);
 
         /// <summary>
         /// Gets a value indicating whether <see cref="Layout"/> has been calculated at least once.
@@ -39,14 +39,14 @@ namespace MajdataPlay
         /// <summary>
         /// The reference resolution of <c>GlobalCanvas</c> before any display scale is applied.
         /// </summary>
-        Vector2 _baseReferenceResolution;
+        private Vector2 _baseReferenceResolution;
 
         /// <summary>
         /// The input used for the current <see cref="Layout"/>.
         /// </summary>
-        ScreenPosCanvasLayoutInput _lastInput;
+        private ScreenPosCanvasLayoutInput _lastInput;
 
-        void Awake()
+        private void Awake()
         {
             Majdata<ScreenPosCanvasLayoutProvider>.SetAsSingleton(this);
             // Read before any applier changes the scaler; appliers only write in LateUpdate.
@@ -54,7 +54,7 @@ namespace MajdataPlay
             _baseReferenceResolution = canvasScaler != null ? canvasScaler.referenceResolution : s_defaultReferenceResolution;
         }
 
-        void LateUpdate()
+        private void LateUpdate()
         {
             var displayOptions = MajEnv.Settings?.Display;
             if (displayOptions is null)
@@ -90,7 +90,7 @@ namespace MajdataPlay
         /// <param name="screenHeight">The screen height in pixels.</param>
         /// <param name="displayOptions">The display settings to read.</param>
         /// <returns>The layout input.</returns>
-        ScreenPosCanvasLayoutInput CreateInput(int screenWidth, int screenHeight, DisplayOptions displayOptions)
+        private ScreenPosCanvasLayoutInput CreateInput(int screenWidth, int screenHeight, DisplayOptions displayOptions)
         {
             return new ScreenPosCanvasLayoutInput(
                 screenWidth,
