@@ -113,7 +113,7 @@ namespace MajdataPlay.IO
                     switch (manufacturer)
                     {
                         case DeviceManufacturerOption.General:
-                            buttonRingType = ButtonRingDeviceOption.HID;
+                            buttonRingType = userButtonRingType ?? ButtonRingDeviceOption.HID;
                             TouchPanelSerialConnInfo = new()
                             {
 #if UNITY_STANDALONE_WIN
@@ -142,7 +142,7 @@ namespace MajdataPlay.IO
                             };
                             break;
                         case DeviceManufacturerOption.Yuan:
-                            buttonRingType = ButtonRingDeviceOption.HID;
+                            buttonRingType = userButtonRingType ?? ButtonRingDeviceOption.HID;
                             TouchPanelSerialConnInfo = new()
                             {
 #if UNITY_STANDALONE_WIN
@@ -171,7 +171,7 @@ namespace MajdataPlay.IO
                             };
                             break;
                         case DeviceManufacturerOption.Dao:
-                            buttonRingType = ButtonRingDeviceOption.HID;
+                            buttonRingType = userButtonRingType ?? ButtonRingDeviceOption.HID;
                             ButtonRingHidConnInfo = new()
                             {
                                 DeviceName = buttonRingSettings.HidOptions.DeviceName ?? string.Empty,
@@ -190,7 +190,7 @@ namespace MajdataPlay.IO
                             };
                             break;
                         case DeviceManufacturerOption.Nov:
-                            buttonRingType = ButtonRingDeviceOption.Keyboard;
+                            buttonRingType = userButtonRingType ?? ButtonRingDeviceOption.Keyboard;
                             TouchPanelUsbConnInfo = new()
                             {
                                 DeviceName = touchPanelSettings.UsbOptions.DeviceName ?? string.Empty,
@@ -211,7 +211,7 @@ namespace MajdataPlay.IO
                             };
                             break;
                         case DeviceManufacturerOption.Pipe:
-                            buttonRingType = ButtonRingDeviceOption.Pipe;
+                            buttonRingType = userButtonRingType ?? ButtonRingDeviceOption.Pipe;
                             break;
                     }
                 }
