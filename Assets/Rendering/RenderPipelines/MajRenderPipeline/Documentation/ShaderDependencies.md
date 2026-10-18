@@ -40,7 +40,7 @@ GraphicsSettings 的 URP GlobalSettings 注册已清空。可见的 GlobalSettin
 
 ## 2026-10-15 Live2D 迁移补充
 
-Live2D Resources 的 7 个 URP/Core 依赖 Shader 已改用本地 `CubismMajCore.cginc` 和 MRP Library，保留原 Shader 名称、属性及资源 GUID；原本独立的第 8 个 Shader 保持原实现。对 Live2D Resources、Assets/Rendering/Shaders 和 Assets/Rendering/MajRenderPipeline 再次扫描，URP/Core 包路径 include 均为 0。因此下方历史快照中剩余的 2 种场景 Live2D Shader 也已解除 Shader 库依赖；本轮未重新生成旧 JSON 的场景、材质与 Resources 数量快照。
+Live2D Resources 的 7 个 URP/Core 依赖 Shader 已改用本地 `CubismMajCore.cginc` 和 MRP Library，保留原 Shader 名称、属性及资源 GUID；原本独立的第 8 个 Shader 保持原实现。对 Live2D Resources、Assets/Rendering/Shaders 和 Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline 再次扫描，URP/Core 包路径 include 均为 0。因此下方历史快照中剩余的 2 种场景 Live2D Shader 也已解除 Shader 库依赖；本轮未重新生成旧 JSON 的场景、材质与 Resources 数量快照。
 
 SDK 主程序集现在只引用 Unity.InputSystem，渲染执行器和数据上下文不引用 RP 程序集。MRP 桥接单独引用 SDK 与 MRP；原 SDK URP Feature 保留 GUID 并移入按包版本启用的独立适配程序集。后续已移除业务 GameManager / 设置代码中的 URP 分支，并删除三个旧业务 Cubism RenderFeature 与旧 Renderer 对它们的引用。共享 Main Camera 的 URP AdditionalCameraData 及 Init 中对应的启用覆盖项已单独移除；原 Camera、参数、场景引用和 GlobalCamera 保留。GlobalSettings 清理及用户之后卸包的状态见上方补充；未启用样例等闲置资源仍待归档。实现与验证边界见 [管线说明](../README.md#live2d-mrp-适配)。
 
@@ -62,7 +62,7 @@ SDK 主程序集现在只引用 Unity.InputSystem，渲染执行器和数据上�
 
 四个 URP Unlit 材质均已切换到 Maj/Unlit，Shader GUID 为 87ecd25dd76d47958dfe85b30da89add；其中两个仍是原来的场景可达材质。场景可达材质数量仍为 49，没有新增未知 Shader 或重复 GUID。
 
-Assets/Rendering/Shaders 与 Assets/Rendering/MajRenderPipeline 内的 Shader/HLSL/CGInclude/Compute 对 URP/Core RP 的包路径 include 数为 0；14 个场景的主程序 Shader 依赖数也均为 0。
+Assets/Rendering/Shaders 与 Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline 内的 Shader/HLSL/CGInclude/Compute 对 URP/Core RP 的包路径 include 数为 0；14 个场景的主程序 Shader 依赖数也均为 0。
 
 Live2D Resources 仍有 8 种 Shader，其中 7 种依赖 URP/Core，包含场景静态闭包中的 TransparentPicking、CompatibleBlend 2 种。因此完整场景静态依赖不是零，而是由 16 降到 2；主程序范围由 14 降到 0。首次分类表将 Live2D 单列，须同时看 JSON include 字段，不能把分类名称当成不依赖 URP 的证据。
 
@@ -104,8 +104,8 @@ Live2D Resources 仍有 8 种 Shader，其中 7 种依赖 URP/Core，包含场�
 | Maj/Effects/BrightnessAdjustAnimate | Project shader independent of URP/Core | 是 | 否 | 是 | 1/1 | Assets/Rendering/Shaders/BrightnessAdjustAnimate.shader |
 | Maj/Effects/ColorAdjustEffect | Project shader independent of URP/Core | 是 | 否 | 否 | 2/2 | Assets/Rendering/Shaders/ColorAdjustEffect.shader |
 | Maj/Effects/HoldShineShader | Project shader independent of URP/Core | 是 | 否 | 是 | 1/1 | Assets/Rendering/Shaders/HoldShineShader.shader |
-| Hidden/Maj/FinalCopy | Project shader independent of URP/Core | 否 | 否 | 否 | 0/0 | Assets/Rendering/MajRenderPipeline/Runtime/Shaders/MajFinalCopy.shader |
-| Maj/Unlit | Project shader independent of URP/Core | 是 | 是 | 否 | 2/4 | Assets/Rendering/MajRenderPipeline/Runtime/Shaders/MajUnlit.shader |
+| Hidden/Maj/FinalCopy | Project shader independent of URP/Core | 否 | 否 | 否 | 0/0 | Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline/Runtime/Shaders/MajFinalCopy.shader |
+| Maj/Unlit | Project shader independent of URP/Core | 是 | 是 | 否 | 2/4 | Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline/Runtime/Shaders/MajUnlit.shader |
 | Maj/Notes/FrontToBackComposite | Project shader independent of URP/Core | 否 | 否 | 否 | 0/0 | Assets/Rendering/Shaders/Notes/FrontToBackComposite.shader |
 | Maj/Notes/FrontToBackSprite | Project shader independent of URP/Core | 否 | 否 | 否 | 0/0 | Assets/Rendering/Shaders/Notes/FrontToBackSprite.shader |
 | Maj/Notes/Common | Project shader independent of URP/Core | 否 | 否 | 否 | 0/1 | Assets/Rendering/Shaders/Notes/Common.shader |
@@ -124,8 +124,8 @@ TMP 场景可达 TextMeshPro/Distance Field（16个材质子资产）和 TextMes
 
 ## 主程序运行时引用补充
 
-- `Assets/Rendering/MajRenderPipeline/Runtime/MajCameraRenderer.cs:51`：`_finalCopyMaterial = new Material(finalCopyShader)`；场景脚本可达=False；Editor 路径=False。
-- `Assets/Rendering/MajRenderPipeline/Runtime/MajRenderPipelineAsset.cs:82`：`_finalCopyShader = Shader.Find("Hidden/Maj/FinalCopy");`；场景脚本可达=False；Editor 路径=False。
+- `Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline/Runtime/MajCameraRenderer.cs:51`：`_finalCopyMaterial = new Material(finalCopyShader)`；场景脚本可达=False；Editor 路径=False。
+- `Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline/Runtime/MajRenderPipelineAsset.cs:82`：`_finalCopyShader = Shader.Find("Hidden/Maj/FinalCopy");`；场景脚本可达=False；Editor 路径=False。
 - `Assets/Scripts/Rendering/RawSpriteResources.cs:170`：`var material = new Material(source)`；场景脚本可达=False；Editor 路径=False。
 - `Assets/Scripts/Scenes/Test/IOListener.cs:45`：`_materials[i] = new Material(Shader.Find("Sprites/Default"));`；场景脚本可达=True；Editor 路径=False。
 

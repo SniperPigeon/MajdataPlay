@@ -57,7 +57,7 @@ Shader "Maj/Unlit"
             #pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
             #pragma shader_feature_local_fragment _ALPHAMODULATE_ON
 
-            #include "Assets/Rendering/MajRenderPipeline/Library/MajCore.hlsl"
+            #include "Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline/Library/MajCore.hlsl"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);

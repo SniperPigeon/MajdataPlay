@@ -1,3 +1,9 @@
+# Maj Render Pipeline 项目资源与集成记录
+
+管线实现位于 [`Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline`](../../../Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline/README.md)，包含运行时、编辑器、管线 Shader 和共享 HLSL 库。本目录只保存 `Presets/` 中的项目配置资产，以及 `Documentation/` 和本文件中的项目集成、调优及历史验证记录。
+
+下文的 `Runtime/`、`Editor/` 和 `Library/` 路径均相对上述插件库目录；`Presets/` 和 `Documentation/` 路径相对本目录。程序集名称、Shader 名称以及迁移资产的 GUID 保持不变。
+
 ## 2026-10-18 传感器边框透明度（当前）
 
 保留 5 份静态窄边 Mesh、34 个可视绑定与原碰撞数据；颜色仍为闲置红 / 触发绿。Shader 恢复 Transparent 队列（3000）、标准 Alpha Blend、ZWrite Off、ZTest LEqual，不再使用下一节历史记录中的 Opaque 状态。

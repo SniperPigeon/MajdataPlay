@@ -21,7 +21,7 @@ Shader "Maj/Debug/SensorBorder"
             #pragma target 3.0
             #pragma vertex Vert
             #pragma fragment Frag
-            #include "Assets/Rendering/MajRenderPipeline/Library/MajCore.hlsl"
+            #include "Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline/Library/MajCore.hlsl"
             CBUFFER_START(UnityPerMaterial)
                 half4 _BaseColor;
             CBUFFER_END

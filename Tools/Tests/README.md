@@ -37,6 +37,15 @@ Identical settings share immutable meshes. Changing Size can allocate a new mesh
 continuous size animation is not allocation-free. NoteRenderer keeps its preloaded
 Simple meshes and uses the shared cache for Sliced/Tiled, still ignoring flips.
 
+## Rendering library layout
+
+Run `./Tools/Tests/RenderingLayoutValidation/Validate.ps1` to check the reusable
+pipeline and project-asset directory split, preserved GUIDs and assembly
+membership, shader include paths, and the settings harness source link.
+See [Rendering layout validation](RenderingLayoutValidation/README.md) for scope
+and limitations. This read-only check does not replace Unity compilation or
+rendered-output verification.
+
 ## Translation Editor
 
 See [Translation editor validation](TranslationEditorValidation.md) for the static

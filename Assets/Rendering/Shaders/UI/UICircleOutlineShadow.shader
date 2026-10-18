@@ -63,7 +63,7 @@ Shader "Maj/UI/CircleMaskWithOutlineShadow"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #include "Assets/Rendering/MajRenderPipeline/Library/MajCore.hlsl"
+            #include "Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline/Library/MajCore.hlsl"
 
             struct appdata
             {

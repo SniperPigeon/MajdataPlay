@@ -5,11 +5,11 @@
 
 // This entry point also works with URP: it consumes Unity's standard matrices and
 // per-draw inputs, without importing URP lighting, RenderGraph or package headers.
-#include "Assets/Rendering/MajRenderPipeline/Library/MajCore.hlsl"
+#include "Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline/Library/MajCore.hlsl"
 
 // Adapted from Unity Graphics 17.3 ShaderVariablesFunctions.deprecated.hlsl.
 // Copyright (c) Unity Technologies ApS. Unity Companion License; see
-// Assets/Rendering/MajRenderPipeline/Library/LICENSE-Unity.md and SOURCE.md.
+// Assets/Plugins/MajdataPlay/Rendering/RenderPipelines/MajRenderPipeline/Library/LICENSE-Unity.md and SOURCE.md.
 // Keep the original projected-screen UV convention used by Cubism BlendImage.
 // _ProjectionParams.x already describes the active projection flip; adding a
 // graphicsUVStartsAtTop flip here would change background sampling on render RTs.
