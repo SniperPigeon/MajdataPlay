@@ -433,7 +433,7 @@ namespace MajdataPlay
                 var oColor = _overlayImage.color;
                 _overlayImage.color = new(1, 1, 1, oColor.a);
                 _subImage.color = Color.white;
-            }            
+            }
         }
 
         static void SetGraphicAlpha(Graphic graphic, float alpha)
