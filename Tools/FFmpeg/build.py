@@ -818,13 +818,14 @@ def write_meta(file, target):
         platform_name, cpu, editor_os = 'OSXUniversal', ('ARM64' if target.endswith('arm64') else 'x86_64'), 'OSX'
     else:
         platform_name, cpu, editor_os = 'iOS', 'AnyCPU', ''
-    prefix = {'Android':'Android', 'iOS':'iPhone'}.get(platform_name, 'Standalone')
     # Without DefaultValueInitialized, Unity can replace Editor enablement on import.
+    # Version 3 importers: Unity reads a version 2 OSXUniversal entry as AnyCPU, so
+    # both macOS architectures land in one universal build and collide.
     write_text_atomic(meta, f'''fileFormatVersion: 2
 guid: {guid}
 PluginImporter:
   externalObjects: {{}}
-  serializedVersion: 2
+  serializedVersion: 3
   iconMap: {{}}
   executionOrder: {{}}
   defineConstraints: []
@@ -833,22 +834,16 @@ PluginImporter:
   isExplicitlyReferenced: 0
   validateReferences: 1
   platformData:
-  - first:
-      Any:
-    second:
+    Any:
       enabled: 0
       settings: {{}}
-  - first:
-      Editor: Editor
-    second:
+    Editor:
       enabled: {1 if editor_os else 0}
       settings:
         CPU: {cpu if editor_os else 'AnyCPU'}
         DefaultValueInitialized: true
         OS: {editor_os or 'AnyOS'}
-  - first:
-      {prefix}: {platform_name}
-    second:
+    {platform_name}:
       enabled: 1
       settings:
         CPU: {cpu}
