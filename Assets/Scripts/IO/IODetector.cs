@@ -122,7 +122,7 @@ namespace MajdataPlay.IO
                     switch (manufacturer)
                     {
                         case DeviceManufacturerOption.General:
-                            buttonRingType = ButtonRingDeviceOption.HID;
+                            buttonRingType = userButtonRingType ?? ButtonRingDeviceOption.HID;
                             TouchPanelSerialConnInfo = new()
                             {
 #if UNITY_STANDALONE_WIN
@@ -151,7 +151,7 @@ namespace MajdataPlay.IO
                             };
                             break;
                         case DeviceManufacturerOption.Yuan:
-                            buttonRingType = ButtonRingDeviceOption.HID;
+                            buttonRingType = userButtonRingType ?? ButtonRingDeviceOption.HID;
                             TouchPanelSerialConnInfo = new()
                             {
 #if UNITY_STANDALONE_WIN
@@ -180,7 +180,7 @@ namespace MajdataPlay.IO
                             };
                             break;
                         case DeviceManufacturerOption.Dao:
-                            buttonRingType = ButtonRingDeviceOption.HID;
+                            buttonRingType = userButtonRingType ?? ButtonRingDeviceOption.HID;
                             ButtonRingHidConnInfo = new()
                             {
                                 DeviceName = buttonRingSettings.HidOptions.DeviceName ?? string.Empty,
@@ -199,7 +199,7 @@ namespace MajdataPlay.IO
                             };
                             break;
                         case DeviceManufacturerOption.Nov:
-                            buttonRingType = ButtonRingDeviceOption.Keyboard;
+                            buttonRingType = userButtonRingType ?? ButtonRingDeviceOption.Keyboard;
                             TouchPanelUsbConnInfo = new()
                             {
                                 DeviceName = touchPanelSettings.UsbOptions.DeviceName ?? string.Empty,
@@ -208,6 +208,14 @@ namespace MajdataPlay.IO
                                 Configuration = 1,
                                 Interface = 1,
                                 PacketSize = 64
+                            };
+                            ButtonRingHidConnInfo = new()
+                            {
+                                DeviceName = buttonRingSettings.HidOptions.DeviceName ?? string.Empty,
+                                ProductId = buttonRingSettings.HidOptions.ProductId ?? (playerIndex == 1 ? GENERAL_HID_1P_PID : GENERAL_HID_2P_PID),
+                                VendorId = buttonRingSettings.HidOptions.VendorId ?? (playerIndex == 1 ? GENERAL_HID_1P_VID : GENERAL_HID_2P_VID),
+                                Exclusice = buttonRingSettings.HidOptions.Exclusice,
+                                OpenPriority = buttonRingSettings.HidOptions.OpenPriority
                             };
                             LedDeviceSerialConnInfo = new()
                             {
@@ -225,7 +233,7 @@ namespace MajdataPlay.IO
                             break;
 #endif
                         case DeviceManufacturerOption.Pipe:
-                            buttonRingType = ButtonRingDeviceOption.Pipe;
+                            buttonRingType = userButtonRingType ?? ButtonRingDeviceOption.Pipe;
                             break;
                     }
                 }

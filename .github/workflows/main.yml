@@ -145,6 +145,7 @@ jobs:
           buildName: MajdataPlay
           buildsPath: ${{ env.CONFIGURATION }}
           androidExportType: androidStudioProject
+          androidSymbolType: debugging
 
       - name: Fix Directory Permissions
         run: sudo chown -R $USER:$USER ${{ env.CONFIGURATION }}/${{ env.TARGET_PLATFORM }}
@@ -301,6 +302,22 @@ jobs:
           done
           ls -la out
 
+      - name: Collect Android APK symbols
+        run: |
+          set -euo pipefail
+          SYMBOLS_DIR="$GITHUB_WORKSPACE/${{ env.UNITY_PROJECT_EXPORT_PATH }}/unityLibrary/symbols"
+          # Snapshot APK symbols before the Play build can replace them.
+          for ABI in armeabi-v7a arm64-v8a; do
+            for LIBRARY in libmain.so libunity.so libil2cpp.so; do
+              if [[ ! -s "$SYMBOLS_DIR/$ABI/$LIBRARY" ]]; then
+                echo "::error::Missing APK symbols: $SYMBOLS_DIR/$ABI/$LIBRARY"
+                exit 1
+              fi
+            done
+            SYMBOLS_ZIP="$GITHUB_WORKSPACE/out/MajdataPlay-Android-${{ env.BUNDLE_VERSION_WITH_HASH }}-nightly.$ABI.symbols.zip"
+            (cd "$SYMBOLS_DIR" && zip -qry "$SYMBOLS_ZIP" "$ABI")
+          done
+
       - name: Build Play (AAB)
         env:
           ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
@@ -334,6 +351,30 @@ jobs:
           cp "${{ env.UNITY_PROJECT_EXPORT_PATH }}/launcher/build/outputs/bundle/release/launcher-release.aab" "out/MajdataPlay-Android-${{ env.BUNDLE_VERSION_WITH_HASH }}-nightly.aab"
           ls -la out
 
+      - name: Collect Android Play symbols
+        run: |
+          set -euo pipefail
+          SYMBOLS_DIR="$GITHUB_WORKSPACE/${{ env.UNITY_PROJECT_EXPORT_PATH }}/unityLibrary/symbols"
+          for ABI in armeabi-v7a arm64-v8a; do
+            for LIBRARY in libmain.so libunity.so libil2cpp.so; do
+              if [[ ! -s "$SYMBOLS_DIR/$ABI/$LIBRARY" ]]; then
+                echo "::error::Missing Play symbols: $SYMBOLS_DIR/$ABI/$LIBRARY"
+                exit 1
+              fi
+            done
+          done
+          # Google Play expects all ABI directories at the root of one archive.
+          SYMBOLS_ZIP="$GITHUB_WORKSPACE/out/MajdataPlay-Android-${{ env.BUNDLE_VERSION_WITH_HASH }}-nightly.play.symbols.zip"
+          (cd "$SYMBOLS_DIR" && zip -qry "$SYMBOLS_ZIP" armeabi-v7a arm64-v8a)
+
+      - name: Upload Android symbols as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MajdataPlay-Android-symbols
+          path: out/*.symbols.zip
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload foss APK outputs as workflow artifact
         uses: actions/upload-artifact@v4
         with:
@@ -357,6 +398,7 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_DEPLOY_ACCOUNT_JSON }}
           packageName: net.majdata.majdataplay
           releaseFiles: out/MajdataPlay-Android-${{ env.BUNDLE_VERSION_WITH_HASH }}-nightly.aab
+          debugSymbols: out/MajdataPlay-Android-${{ env.BUNDLE_VERSION_WITH_HASH }}-nightly.play.symbols.zip
           track: internal
           status: completed
 
